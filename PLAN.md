@@ -57,6 +57,19 @@ Pixoo 64/                            # RAIZ DO PROJETO
 │       ├── media.html               # Tab 2: Foto/Vídeo para Pixoo
 │       └── youtube.html             # Tab 3: YouTube para Pixoo
 │
+├── tests/                           # Testes automatizados
+│   ├── __init__.py
+│   ├── conftest.py                  # Fixtures compartilhadas (pytest)
+│   ├── test_gif_converter.py        # Testes de conversão de GIF
+│   ├── test_video_processor.py      # Testes de processamento de vídeo
+│   ├── test_pixoo_connection.py     # Testes de conexão (com mock)
+│   ├── test_pixoo_upload.py         # Testes de upload (com mock)
+│   ├── test_youtube_downloader.py   # Testes de download YouTube (com mock)
+│   └── fixtures/                    # Arquivos de teste
+│       ├── sample_64x64.gif         # GIF já no tamanho correto
+│       ├── sample_large.gif         # GIF que precisa conversão
+│       └── sample_image.png         # Imagem para teste
+│
 ├── bin/
 │   └── ffmpeg                       # Binário FFmpeg estático para Mac (baixar)
 │
@@ -70,6 +83,7 @@ Pixoo 64/                            # RAIZ DO PROJETO
 │
 ├── PIXOO64_SPECS.md                 # [EXISTENTE] Especificações do hardware
 ├── PLAN.md                          # Este arquivo
+├── CLAUDE.md                        # Princípios, patterns e decisões (template compounding-knowledge)
 ├── requirements.txt                 # Dependências Python (atualizar)
 └── README.md                        # Documentação do usuário
 ```
@@ -80,14 +94,49 @@ Pixoo 64/                            # RAIZ DO PROJETO
 
 | Arquivo | Ação | Detalhes |
 |---------|------|----------|
-| `convert_to_pixoo.py` | **EXTRAIR E DELETAR** | Extrair funções úteis para `app/services/gif_converter.py`, depois deletar |
-| `upload_to_pixoo.py` | **DELETAR** | Lógica será reescrita em `app/services/pixoo_upload.py` |
+| `convert_to_pixoo.py` | **REFATORAR** | Extrair funções de processamento de imagem para `app/services/gif_converter.py` como módulo reutilizável. Adaptar funções para aceitar objetos PIL.Image em vez de caminhos de arquivo. Após migração completa, deletar arquivo original. |
+| `upload_to_pixoo.py` | **DELETAR** | Lógica será reescrita em `app/services/pixoo_upload.py` com melhor integração ao singleton de conexão |
 | `PROJECT_STATE.md` | **DELETAR** | Obsoleto |
 | `PIXOO64_SPECS.md` | **MANTER** | Referência técnica do hardware |
 | `Originais/` | **MANTER** | Útil para testes |
 | `Processados/` | **MANTER** | Útil para testes |
 | `Temp/` | **MANTER** | Usar como pasta temporária do app |
 | `venv/` | **MANTER** | Ambiente virtual já configurado |
+
+### Detalhes da Refatoração de `convert_to_pixoo.py`
+
+O arquivo atual contém ~480 linhas com lógica mista de CLI e processamento. A refatoração vai:
+
+1. **Separar responsabilidades:**
+   - Remover toda lógica CLI (argparse, prints, main)
+   - Manter apenas funções puras de processamento de imagem
+
+2. **Funções a preservar e adaptar:**
+   ```python
+   # Funções core de processamento:
+   - load_gif_frames()           # Carrega frames de GIF
+   - adaptive_downscale()        # Redimensiona com qualidade
+   - smart_crop()                # Crop inteligente
+   - detect_edges()              # Detecção de bordas (Sobel)
+   - remove_dark_halos()         # Remove artefatos
+   - enhance_for_led_display()   # Otimiza para LED
+   - quantize_colors()           # Reduz paleta
+   ```
+
+3. **Nova interface do serviço:**
+   ```python
+   # app/services/gif_converter.py
+   class GifConverter:
+       def is_pixoo_ready(path: Path) -> bool
+       def convert_image(image: Image, options: ConvertOptions) -> Image
+       def convert_gif(path: Path, options: ConvertOptions) -> tuple[Path, GifMetadata]
+       def create_preview(path: Path, scale: int = 4) -> bytes
+   ```
+
+4. **Benefícios:**
+   - Testável unitariamente (funções puras)
+   - Reutilizável por múltiplos routers
+   - Sem dependências de I/O no core
 
 ---
 
@@ -264,6 +313,11 @@ Pixoo 64/                            # RAIZ DO PROJETO
 
 **Objetivo:** Criar estrutura de pastas e preparar ambiente.
 
+- [ ] 1.0 Criar `CLAUDE.md` baseado no template de `~/compounding-knowledge/templates/CLAUDE.md`:
+  - Copiar princípios universais e patterns do template
+  - Preencher seções específicas do projeto com info do PLAN.md
+  - Ao finalizar projeto, adicionar entrada em `compounding-knowledge/projects/pixoo-manager.md`
+
 - [ ] 1.1 Criar estrutura de diretórios:
   ```
   mkdir -p app/routers app/services app/static/css app/static/js app/static/vendor app/templates bin build
@@ -322,6 +376,12 @@ Pixoo 64/                            # RAIZ DO PROJETO
 
   # Build
   pyinstaller>=6.0.0
+
+  # Testes
+  pytest>=8.0.0
+  pytest-asyncio>=0.23.0
+  httpx>=0.27.0              # Cliente async para testar FastAPI
+  respx>=0.21.0              # Mock de requisições HTTP
   ```
 
 - [ ] 1.6 Instalar dependências: `pip install -r requirements.txt`
@@ -526,6 +586,79 @@ Pixoo 64/                            # RAIZ DO PROJETO
 
 ---
 
+### Fase 7: Testes Automatizados
+
+**Objetivo:** Implementar testes unitários e de integração para documentar comportamento esperado.
+
+- [ ] 7.1 Criar estrutura de testes:
+  ```
+  mkdir -p tests/fixtures
+  touch tests/__init__.py tests/conftest.py
+  ```
+
+- [ ] 7.2 Criar `tests/conftest.py` com fixtures compartilhadas:
+  - `@pytest.fixture` para cliente FastAPI async
+  - `@pytest.fixture` para mock do Pixoo connection
+  - `@pytest.fixture` para arquivos de teste (GIFs, imagens)
+
+- [ ] 7.3 Criar `tests/fixtures/` com arquivos de teste:
+  - Gerar `sample_64x64.gif` (GIF já no tamanho correto)
+  - Gerar `sample_large.gif` (GIF 256x256 para testar conversão)
+  - Copiar `sample_image.png` de `Originais/`
+
+- [ ] 7.4 Criar `tests/test_gif_converter.py`:
+  ```python
+  # Testes:
+  - test_is_pixoo_ready_with_correct_size()
+  - test_is_pixoo_ready_with_wrong_size()
+  - test_convert_image_preserves_aspect()
+  - test_convert_gif_limits_frames()
+  - test_enhance_for_led_increases_contrast()
+  - test_quantize_colors_reduces_palette()
+  ```
+
+- [ ] 7.5 Criar `tests/test_video_processor.py`:
+  ```python
+  # Testes:
+  - test_get_video_info_returns_duration()
+  - test_video_to_gif_respects_time_range()
+  - test_video_to_gif_limits_duration()
+  - test_image_to_gif_creates_single_frame()
+  ```
+
+- [ ] 7.6 Criar `tests/test_pixoo_connection.py`:
+  ```python
+  # Testes com mock HTTP:
+  - test_connect_success()
+  - test_connect_timeout()
+  - test_discover_finds_device()
+  - test_disconnect_clears_state()
+  - test_singleton_returns_same_instance()
+  ```
+
+- [ ] 7.7 Criar `tests/test_pixoo_upload.py`:
+  ```python
+  # Testes com mock HTTP:
+  - test_frame_to_base64_correct_size()
+  - test_upload_gif_sends_all_frames()
+  - test_upload_gif_respects_frame_limit()
+  - test_upload_fails_without_connection()
+  ```
+
+- [ ] 7.8 Criar `tests/test_youtube_downloader.py`:
+  ```python
+  # Testes com mock yt-dlp:
+  - test_get_video_info_parses_correctly()
+  - test_get_video_info_handles_invalid_url()
+  - test_download_range_respects_limits()
+  ```
+
+- [ ] 7.9 Rodar testes: `pytest tests/ -v`
+
+- [ ] 7.10 Verificar cobertura: `pytest tests/ --cov=app --cov-report=term-missing`
+
+---
+
 ## Decisões Técnicas
 
 | Aspecto | Decisão | Justificativa |
@@ -537,6 +670,8 @@ Pixoo 64/                            # RAIZ DO PROJETO
 | Empacotamento | PyInstaller --onedir | Inclui todas dependências, funciona em qualquer Mac |
 | CSS Framework | Pico.css | Leve, semântico, mesmo do PDFTools |
 | JS Framework | Alpine.js | Reativo sem build step, mesmo do PDFTools |
+| Framework de testes | pytest + httpx | Padrão para FastAPI, async-friendly |
+| Mocking HTTP | respx | Integra bem com httpx para mock de requisições |
 
 ---
 
@@ -552,7 +687,10 @@ Pixoo 64/                            # RAIZ DO PROJETO
 
 ---
 
-## Testes Manuais Sugeridos
+## Testes Manuais (Complementares aos Automatizados)
+
+> Os testes automatizados da Fase 7 cobrem lógica de serviços e edge cases com mocks.
+> Os testes manuais abaixo validam integração real com hardware e fluxos de UI.
 
 1. **Conexão:**
    - [ ] Descoberta automática funciona
