@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Build
+build/
+dist/
+*.spec
+*.app/
+*.dmg
+
+# Temp files
+Temp/
+*.tmp
+*.temp
+
+# FFmpeg binary (download separately)
+bin/ffmpeg
+bin/ffprobe
+
+# Processed files (keep folder, ignore contents)
+Processados/*.gif
+
+# Logs
+*.log
