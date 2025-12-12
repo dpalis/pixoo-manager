@@ -166,8 +166,17 @@ def mock_pixoo_connection(monkeypatch):
     def mock_get_connection():
         return mock
 
+    # Aplicar mock em todos os lugares que importam get_pixoo_connection
     monkeypatch.setattr(
         "app.services.pixoo_connection.get_pixoo_connection",
+        mock_get_connection
+    )
+    monkeypatch.setattr(
+        "app.routers.connection.get_pixoo_connection",
+        mock_get_connection
+    )
+    monkeypatch.setattr(
+        "app.routers.gif_upload.get_pixoo_connection",
         mock_get_connection
     )
 

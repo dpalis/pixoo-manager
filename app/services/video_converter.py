@@ -215,7 +215,8 @@ def convert_video_to_gif(
                 if options.led_optimize:
                     processed = enhance_for_led_display(processed)
 
-                processed = quantize_colors(processed, options.num_colors)
+                if options.num_colors > 0:
+                    processed = quantize_colors(processed, options.num_colors)
                 processed_frames.append(processed)
 
                 # Liberar referência ao frame original

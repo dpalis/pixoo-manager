@@ -4,6 +4,7 @@ Servico de download de videos do YouTube.
 Usa yt-dlp para baixar trechos de video e converter para GIF.
 """
 
+import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,7 +83,6 @@ def get_youtube_info(url: str) -> YouTubeInfo:
         if result.returncode != 0:
             raise ConversionError(f"Erro ao obter info do video: {result.stderr}")
 
-        import json
         info = json.loads(result.stdout)
 
         return YouTubeInfo(
