@@ -126,7 +126,8 @@ def upload_gif(
 
     # Calcular velocidade se não especificada
     if speed is None:
-        avg_duration = sum(durations) // len(durations)
+        # Usar divisão float e arredondar para evitar drift de timing
+        avg_duration = round(sum(durations) / len(durations))
         speed = max(avg_duration, 50)  # Mínimo 50ms
 
     # Resetar buffer antes de enviar

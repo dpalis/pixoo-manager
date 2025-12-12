@@ -114,7 +114,8 @@ def extract_video_segment(
 
                 # Extrair frame no tempo especifico
                 time = t / target_fps
-                if time > duration:
+                # Usar >= para evitar off-by-one no último frame
+                if time >= duration:
                     break
 
                 frame_array = segment.get_frame(time)
@@ -192,8 +193,8 @@ def convert_video_to_gif(
         if options.led_optimize:
             processed = enhance_for_led_display(processed)
 
-        # Quantizar cores
-        processed = quantize_colors(processed, options.max_colors)
+        # Quantizar cores (usa num_colors, não max_colors)
+        processed = quantize_colors(processed, options.num_colors)
 
         processed_frames.append(processed)
 
