@@ -11,8 +11,7 @@ from typing import List, Optional, Tuple
 
 import imageio.v3 as iio
 import numpy as np
-from collections import Counter
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 
 from app.config import MAX_CONVERT_FRAMES, PIXOO_SIZE
 from app.services.exceptions import ConversionError, TooManyFramesError
@@ -67,88 +66,6 @@ def load_gif_frames(path: Path) -> Tuple[List[Image.Image], List[int]]:
     return frames, durations
 
 
-def detect_edges(image: Image.Image, threshold: int = 30) -> Image.Image:
-    """
-    Detecta bordas usando filtro Sobel.
-
-    Args:
-        image: Imagem PIL
-        threshold: Limiar para detecção de bordas
-
-    Returns:
-        Máscara de bordas (imagem em escala de cinza)
-    """
-    gray = image.convert('L')
-
-    # Sobel X e Y
-    sobel_x = gray.filter(ImageFilter.Kernel(
-        size=(3, 3),
-        kernel=[-1, 0, 1, -2, 0, 2, -1, 0, 1],
-        scale=1
-    ))
-    sobel_y = gray.filter(ImageFilter.Kernel(
-        size=(3, 3),
-        kernel=[-1, -2, -1, 0, 0, 0, 1, 2, 1],
-        scale=1
-    ))
-
-    # Magnitude
-    arr_x = np.array(sobel_x, dtype=np.float32)
-    arr_y = np.array(sobel_y, dtype=np.float32)
-    magnitude = np.sqrt(arr_x**2 + arr_y**2)
-
-    # Threshold para criar máscara binária
-    edge_mask = (magnitude > threshold).astype(np.uint8) * 255
-
-    return Image.fromarray(edge_mask, mode='L')
-
-
-def majority_color_block_sampling(image: Image.Image, target_size: int) -> Image.Image:
-    """
-    Divide a imagem em blocos e seleciona a cor mais frequente de cada bloco.
-    Preserva detalhes melhor que interpolação simples.
-
-    Args:
-        image: Imagem PIL em RGB
-        target_size: Tamanho alvo (quadrado)
-
-    Returns:
-        Imagem redimensionada
-    """
-    img_array = np.array(image.convert('RGB'))
-    h, w = img_array.shape[:2]
-
-    block_h = h / target_size
-    block_w = w / target_size
-
-    result = np.zeros((target_size, target_size, 3), dtype=np.uint8)
-
-    for y in range(target_size):
-        for x in range(target_size):
-            # Definir limites do bloco
-            y_start = int(y * block_h)
-            y_end = int((y + 1) * block_h)
-            x_start = int(x * block_w)
-            x_end = int((x + 1) * block_w)
-
-            # Extrair bloco
-            block = img_array[y_start:y_end, x_start:x_end]
-
-            if block.size == 0:
-                continue
-
-            # Encontrar cor mais frequente
-            pixels = block.reshape(-1, 3)
-            # Quantizar levemente para agrupar cores similares
-            quantized = (pixels // 8) * 8
-            pixel_tuples = [tuple(p) for p in quantized]
-            most_common = Counter(pixel_tuples).most_common(1)[0][0]
-
-            result[y, x] = most_common
-
-    return Image.fromarray(result, mode='RGB')
-
-
 def smart_crop(image: Image.Image, target_size: int = PIXOO_SIZE) -> Image.Image:
     """
     Crop inteligente que preserva aspect ratio e centraliza o conteúdo.
@@ -197,7 +114,7 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
     Remove halos escuros (contornos indesejados) causados por anti-aliasing.
 
     Detecta pixels escuros isolados perto de transições de cor e substitui
-    pela cor do vizinho mais próximo.
+    pela média dos vizinhos. Usa operações numpy vetorizadas para performance.
 
     Args:
         image: Imagem PIL em RGB
@@ -210,35 +127,37 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
     img_array = np.array(image, dtype=np.float32)
     h, w = img_array.shape[:2]
 
-    # Trabalhar com luminosidade (simplificado: usar média RGB)
+    # Calcular luminosidade
     luminosity = np.mean(img_array, axis=2)
 
+    # Calcular média dos vizinhos usando sliding window (numpy vectorizado)
+    # Criar view com padding para evitar bordas
+    padded_lum = np.pad(luminosity, radius, mode='edge')
+    padded_img = np.pad(img_array, ((radius, radius), (radius, radius), (0, 0)), mode='edge')
+
+    # Calcular soma de vizinhos usando slicing (evita loops)
+    kernel_size = 2 * radius + 1
+    neighbor_sum = np.zeros_like(luminosity)
+    neighbor_count = kernel_size * kernel_size
+
+    for dy in range(kernel_size):
+        for dx in range(kernel_size):
+            neighbor_sum += padded_lum[dy:dy+h, dx:dx+w]
+
+    neighbor_avg = neighbor_sum / neighbor_count
+
+    # Criar máscara de pixels que são halos (muito mais escuros que vizinhos)
+    is_halo = luminosity < (neighbor_avg - threshold)
+
+    # Calcular média dos vizinhos para cada canal RGB
     result = img_array.copy()
-
-    for y in range(radius, h - radius):
-        for x in range(radius, w - radius):
-            current_lum = luminosity[y, x]
-
-            # Pegar luminosidade dos vizinhos
-            neighbors_lum = []
-            neighbors_colors = []
-            for dy in range(-radius, radius + 1):
-                for dx in range(-radius, radius + 1):
-                    if dy == 0 and dx == 0:
-                        continue
-                    ny, nx = y + dy, x + dx
-                    neighbors_lum.append(luminosity[ny, nx])
-                    neighbors_colors.append(img_array[ny, nx])
-
-            avg_neighbor_lum = np.mean(neighbors_lum)
-
-            # Se o pixel atual é muito mais escuro que os vizinhos, é um halo
-            if current_lum < avg_neighbor_lum - threshold:
-                # Substituir pela média dos vizinhos mais claros
-                bright_neighbors = [c for c, l in zip(neighbors_colors, neighbors_lum)
-                                   if l > current_lum + 10]
-                if bright_neighbors:
-                    result[y, x] = np.mean(bright_neighbors, axis=0)
+    for c in range(3):
+        channel_sum = np.zeros((h, w), dtype=np.float32)
+        for dy in range(kernel_size):
+            for dx in range(kernel_size):
+                channel_sum += padded_img[dy:dy+h, dx:dx+w, c]
+        channel_avg = channel_sum / neighbor_count
+        result[:, :, c] = np.where(is_halo, channel_avg, img_array[:, :, c])
 
     return Image.fromarray(result.astype(np.uint8), mode='RGB')
 
@@ -626,45 +545,3 @@ def create_preview(input_path: Path, scale: int = 4) -> bytes:
     buffer = io.BytesIO()
     iio.imwrite(buffer, scaled_frames, extension=".gif", fps=fps, loop=0)
     return buffer.getvalue()
-
-
-def image_to_single_frame_gif(
-    image: Image.Image,
-    options: Optional[ConvertOptions] = None
-) -> Tuple[Path, GifMetadata]:
-    """
-    Converte uma imagem estática para GIF de um frame.
-
-    Args:
-        image: Imagem PIL
-        options: Opções de conversão
-
-    Returns:
-        Tupla (caminho do GIF, metadados)
-    """
-    if options is None:
-        options = ConvertOptions()
-
-    converted = convert_image(image, options)
-
-    output_path = create_temp_output(".gif")
-
-    try:
-        frame_array = np.array(converted)
-        iio.imwrite(output_path, [frame_array], fps=1, loop=0)
-
-        metadata = GifMetadata(
-            width=PIXOO_SIZE,
-            height=PIXOO_SIZE,
-            frames=1,
-            duration_ms=1000,
-            file_size=output_path.stat().st_size,
-            path=output_path
-        )
-
-        return output_path, metadata
-
-    except Exception as e:
-        if output_path.exists():
-            output_path.unlink()
-        raise ConversionError(f"Falha ao criar GIF: {e}")

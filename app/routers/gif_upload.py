@@ -20,7 +20,6 @@ from app.services.file_utils import stream_upload_to_temp, cleanup_files
 from app.services.gif_converter import (
     convert_gif,
     is_pixoo_ready,
-    create_preview,
     ConvertOptions,
     GifMetadata,
 )

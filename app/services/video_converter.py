@@ -148,6 +148,8 @@ def convert_video_to_gif(
     """
     Converte um segmento de video para GIF 64x64.
 
+    Extrai e processa frames incrementalmente para minimizar uso de memória.
+
     Args:
         path: Caminho do arquivo de video
         start: Tempo inicial em segundos
@@ -165,50 +167,70 @@ def convert_video_to_gif(
     if options is None:
         options = ConvertOptions(led_optimize=True)
 
-    def extraction_progress(p: float):
-        if progress_callback:
-            progress_callback("extracting", p)
+    duration = end - start
 
-    # Extrair frames do video
-    frames, durations = extract_video_segment(
-        path, start, end,
-        progress_callback=extraction_progress
-    )
+    if duration > MAX_VIDEO_DURATION:
+        raise VideoTooLongError(
+            f"Segmento de {duration:.1f}s excede o limite de {MAX_VIDEO_DURATION}s"
+        )
 
-    if not frames:
-        raise ConversionError("Nenhum frame extraido do video")
+    if duration <= 0:
+        raise ConversionError("Tempo final deve ser maior que o inicial")
 
-    # Processar cada frame
-    processed_frames = []
-    total = len(frames)
-
-    for i, frame in enumerate(frames):
-        if progress_callback:
-            progress_callback("processing", i / total)
-
-        # Converter para 64x64
-        processed = adaptive_downscale(frame, PIXOO_SIZE)
-
-        # Otimizar para LED se solicitado
-        if options.led_optimize:
-            processed = enhance_for_led_display(processed)
-
-        # Quantizar cores (usa num_colors, não max_colors)
-        processed = quantize_colors(processed, options.num_colors)
-
-        processed_frames.append(processed)
-
-    if progress_callback:
-        progress_callback("processing", 1.0)
-
-    # Salvar como GIF
+    # Processar frames diretamente do video (evita acumular todos na memória)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     output_path = TEMP_DIR / f"video_{path.stem}_{start:.0f}_{end:.0f}.gif"
 
-    if progress_callback:
-        progress_callback("saving", 0.5)
-
     try:
+        with VideoFileClip(str(path)) as clip:
+            # Cortar o segmento
+            segment = clip.subclipped(start, end)
+
+            # Calcular fps para nao exceder MAX_CONVERT_FRAMES
+            target_fps = min(segment.fps, MAX_CONVERT_FRAMES / duration)
+            target_fps = max(target_fps, 5)  # Minimo 5 FPS
+
+            total_frames = int(duration * target_fps)
+            frame_duration = int(1000 / target_fps)  # ms entre frames
+
+            processed_frames = []
+
+            for i in range(total_frames):
+                time = i / target_fps
+                if time >= duration:
+                    break
+
+                # Reportar progresso (extracao + processamento combinados)
+                if progress_callback:
+                    progress = i / total_frames
+                    progress_callback("processing", progress)
+
+                # Extrair frame
+                frame_array = segment.get_frame(time)
+                frame = Image.fromarray(frame_array)
+
+                # Processar frame imediatamente
+                processed = adaptive_downscale(frame, PIXOO_SIZE)
+
+                if options.led_optimize:
+                    processed = enhance_for_led_display(processed)
+
+                processed = quantize_colors(processed, options.num_colors)
+                processed_frames.append(processed)
+
+                # Liberar referência ao frame original
+                del frame, frame_array
+
+        if not processed_frames:
+            raise ConversionError("Nenhum frame extraido do video")
+
+        if progress_callback:
+            progress_callback("processing", 1.0)
+            progress_callback("saving", 0.5)
+
+        # Salvar como GIF
+        durations = [frame_duration] * len(processed_frames)
+
         processed_frames[0].save(
             output_path,
             save_all=True,
@@ -217,10 +239,15 @@ def convert_video_to_gif(
             loop=0,
             optimize=False
         )
+
+        if progress_callback:
+            progress_callback("saving", 1.0)
+
+        return output_path, len(processed_frames)
+
+    except VideoTooLongError:
+        raise
+    except ConversionError:
+        raise
     except Exception as e:
-        raise ConversionError(f"Erro ao salvar GIF: {e}")
-
-    if progress_callback:
-        progress_callback("saving", 1.0)
-
-    return output_path, len(processed_frames)
+        raise ConversionError(f"Erro ao converter video: {e}")

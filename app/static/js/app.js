@@ -4,6 +4,68 @@
  */
 
 // ============================================
+// Utility Functions (Shared)
+// ============================================
+const utils = {
+    /**
+     * Formata tempo em segundos para MM:SS.ms
+     */
+    formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = (seconds % 60).toFixed(2);
+        return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
+    },
+
+    /**
+     * Formata duração em segundos para MM:SS
+     */
+    formatDuration(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    },
+
+    /**
+     * Parse string de tempo para segundos
+     * Formato: MM:SS.ms ou SS.ms ou SS
+     */
+    parseTimeStr(str) {
+        const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+        if (!match) return null;
+        const mins = parseInt(match[1] || '0');
+        const secs = parseFloat(match[2]);
+        return mins * 60 + secs;
+    },
+
+    /**
+     * Formata tamanho de arquivo em bytes para string legivel
+     */
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    },
+
+    /**
+     * Mostra mensagem em um componente
+     */
+    showMessage(component, text, type) {
+        component.message = text;
+        component.messageType = type;
+    },
+
+    /**
+     * Limpa mensagem de um componente
+     */
+    clearMessage(component) {
+        component.message = '';
+        component.messageType = '';
+    }
+};
+
+// ============================================
 // Connection Status Component
 // ============================================
 function connectionStatus() {
@@ -237,13 +299,11 @@ function gifUpload() {
         },
 
         showMessage(text, type) {
-            this.message = text;
-            this.messageType = type;
+            utils.showMessage(this, text, type);
         },
 
         clearMessage() {
-            this.message = '';
-            this.messageType = '';
+            utils.clearMessage(this);
         }
     };
 }
@@ -351,7 +411,7 @@ function mediaUpload() {
                     this.videoUrl = URL.createObjectURL(file);
                     this.videoDuration = data.duration;
                     this.endTime = Math.min(10, data.duration);
-                    this.endTimeStr = this.formatTime(this.endTime);
+                    this.endTimeStr = utils.formatTime(this.endTime);
                     this.fileInfo = `${data.width}x${data.height} - ${data.duration.toFixed(1)}s`;
                     this.clearMessage();
                 }
@@ -367,7 +427,7 @@ function mediaUpload() {
             if (video) {
                 this.videoDuration = video.duration;
                 this.endTime = Math.min(10, video.duration);
-                this.endTimeStr = this.formatTime(this.endTime);
+                this.endTimeStr = utils.formatTime(this.endTime);
             }
         },
 
@@ -392,34 +452,19 @@ function mediaUpload() {
         },
 
         parseStartTime() {
-            const seconds = this.parseTimeStr(this.startTimeStr);
+            const seconds = utils.parseTimeStr(this.startTimeStr);
             if (seconds !== null) {
                 this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
-                this.startTimeStr = this.formatTime(this.startTime);
+                this.startTimeStr = utils.formatTime(this.startTime);
             }
         },
 
         parseEndTime() {
-            const seconds = this.parseTimeStr(this.endTimeStr);
+            const seconds = utils.parseTimeStr(this.endTimeStr);
             if (seconds !== null) {
                 this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoDuration));
-                this.endTimeStr = this.formatTime(this.endTime);
+                this.endTimeStr = utils.formatTime(this.endTime);
             }
-        },
-
-        parseTimeStr(str) {
-            // Formato: MM:SS.ms ou SS.ms ou SS
-            const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
-            if (!match) return null;
-            const mins = parseInt(match[1] || '0');
-            const secs = parseFloat(match[2]);
-            return mins * 60 + secs;
-        },
-
-        formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = (seconds % 60).toFixed(2);
-            return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
         },
 
         async convertVideo() {
@@ -513,13 +558,11 @@ function mediaUpload() {
         },
 
         showMessage(text, type) {
-            this.message = text;
-            this.messageType = type;
+            utils.showMessage(this, text, type);
         },
 
         clearMessage() {
-            this.message = '';
-            this.messageType = '';
+            utils.clearMessage(this);
         }
     };
 }
@@ -555,9 +598,7 @@ function youtubeDownload() {
         },
 
         formatDuration(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
+            return utils.formatDuration(seconds);
         },
 
         async fetchInfo() {
@@ -581,7 +622,7 @@ function youtubeDownload() {
 
                 this.videoInfo = await response.json();
                 this.endTime = Math.min(10, this.videoInfo.duration);
-                this.endTimeStr = this.formatTime(this.endTime);
+                this.endTimeStr = utils.formatTime(this.endTime);
 
             } catch (e) {
                 console.error('Erro:', e);
@@ -596,7 +637,7 @@ function youtubeDownload() {
             if (this.startTime >= this.endTime) {
                 this.startTime = Math.max(0, this.endTime - 0.1);
             }
-            this.startTimeStr = this.formatTime(this.startTime);
+            this.startTimeStr = utils.formatTime(this.startTime);
         },
 
         updateEndTime() {
@@ -604,37 +645,23 @@ function youtubeDownload() {
             if (this.endTime <= this.startTime) {
                 this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
             }
-            this.endTimeStr = this.formatTime(this.endTime);
+            this.endTimeStr = utils.formatTime(this.endTime);
         },
 
         parseStartTime() {
-            const seconds = this.parseTimeStr(this.startTimeStr);
+            const seconds = utils.parseTimeStr(this.startTimeStr);
             if (seconds !== null && this.videoInfo) {
                 this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
-                this.startTimeStr = this.formatTime(this.startTime);
+                this.startTimeStr = utils.formatTime(this.startTime);
             }
         },
 
         parseEndTime() {
-            const seconds = this.parseTimeStr(this.endTimeStr);
+            const seconds = utils.parseTimeStr(this.endTimeStr);
             if (seconds !== null && this.videoInfo) {
                 this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoInfo.duration));
-                this.endTimeStr = this.formatTime(this.endTime);
+                this.endTimeStr = utils.formatTime(this.endTime);
             }
-        },
-
-        parseTimeStr(str) {
-            const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
-            if (!match) return null;
-            const mins = parseInt(match[1] || '0');
-            const secs = parseFloat(match[2]);
-            return mins * 60 + secs;
-        },
-
-        formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = (seconds % 60).toFixed(2);
-            return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
         },
 
         async downloadAndConvert() {
@@ -718,38 +745,15 @@ function youtubeDownload() {
         },
 
         showMessage(text, type) {
-            this.message = text;
-            this.messageType = type;
+            utils.showMessage(this, text, type);
         },
 
         clearMessage() {
-            this.message = '';
-            this.messageType = '';
+            utils.clearMessage(this);
         }
     };
 }
 
-// ============================================
-// Utility Functions
-// ============================================
-
-/**
- * Formata tempo em segundos para MM:SS.ms
- */
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-}
-
-/**
- * Formata tamanho de arquivo em bytes para string legivel
- */
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+// Expose utils globally for template use
+window.formatTime = utils.formatTime;
+window.formatFileSize = utils.formatFileSize;

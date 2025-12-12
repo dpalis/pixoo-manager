@@ -320,29 +320,3 @@ def cleanup_files(paths: List[Path]) -> None:
             logger.warning(f"Erro ao remover {path}: {e}")
 
 
-async def cleanup_file_async(path: Path) -> None:
-    """
-    Remove arquivo de forma segura (para BackgroundTasks).
-
-    Args:
-        path: Caminho do arquivo para remover
-    """
-    cleanup_files([path] if path else [])
-
-
-def cleanup_temp_dir() -> None:
-    """
-    Remove todos os arquivos do diretório temporário.
-
-    Respeita arquivos que estão em uso.
-    """
-    if not TEMP_DIR.exists():
-        return
-
-    for file in TEMP_DIR.iterdir():
-        try:
-            if file.is_file() and not file_tracker.is_in_use(file):
-                file.unlink()
-                logger.debug(f"Arquivo temporário removido: {file}")
-        except Exception as e:
-            logger.warning(f"Erro ao limpar {file}: {e}")
