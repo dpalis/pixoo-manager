@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR
+from app.routers import connection as connection_router
 
 
 @asynccontextmanager
@@ -67,6 +68,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Configura templates HTML
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+# Registra routers da API
+app.include_router(connection_router.router)
 
 
 # Rotas de páginas
