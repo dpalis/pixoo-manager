@@ -74,7 +74,7 @@
             <!-- Tab: Upload GIF -->
             <div class="tab-content" x-data="gifUpload()">
                 <h2>Upload de GIF</h2>
-                <p class="description">Arraste um GIF ou clique para selecionar. GIFs maiores que 64x64 serao convertidos automaticamente.</p>
+                <p class="description">Arraste um GIF ou imagem (PNG, JPEG, WebP). Arquivos maiores que 64x64 serao convertidos automaticamente.</p>
 
                 <div
                     class="drop-zone"
@@ -87,7 +87,7 @@
                     <input
                         type="file"
                         x-ref="fileInput"
-                        accept="image/gif"
+                        accept="image/gif,image/png,image/jpeg,image/webp"
                         @change="handleFileSelect($event)"
                         style="display: none"
                     >
@@ -99,7 +99,7 @@
                                 <polyline points="17 8 12 3 7 8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
-                            <p>Arraste um GIF aqui ou clique para selecionar</p>
+                            <p>Arraste um GIF ou imagem aqui</p>
                         </div>
                     </template>
 

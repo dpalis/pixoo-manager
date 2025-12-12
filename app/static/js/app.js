@@ -151,8 +151,9 @@ function gifUpload() {
 
         async processFile(file) {
             // Validar tipo
-            if (!file.type.includes('gif')) {
-                this.showMessage('Por favor, selecione um arquivo GIF', 'error');
+            const allowedTypes = ['image/gif', 'image/png', 'image/jpeg', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                this.showMessage('Por favor, selecione um GIF ou imagem (PNG, JPEG, WebP)', 'error');
                 return;
             }
 
