@@ -130,10 +130,14 @@ class TestGetYoutubeInfo:
 
         assert "Timeout" in str(exc_info.value)
 
-    @patch("subprocess.run")
-    def test_raises_for_missing_yt_dlp(self, mock_run):
+    @patch("app.services.youtube_downloader.shutil.which")
+    @patch("app.services.youtube_downloader.YTDLP_PATH")
+    def test_raises_for_missing_yt_dlp(self, mock_ytdlp_path, mock_which):
         """Deve lancar erro quando yt-dlp nao existe."""
-        mock_run.side_effect = FileNotFoundError()
+        # Mock YTDLP_PATH para não existir
+        mock_ytdlp_path.exists.return_value = False
+        # Mock shutil.which para retornar None
+        mock_which.return_value = None
 
         with pytest.raises(ConversionError) as exc_info:
             get_youtube_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -189,10 +193,14 @@ class TestDownloadYoutubeSegment:
 
         assert "Timeout" in str(exc_info.value)
 
-    @patch("subprocess.run")
-    def test_raises_for_missing_yt_dlp(self, mock_run):
+    @patch("app.services.youtube_downloader.shutil.which")
+    @patch("app.services.youtube_downloader.YTDLP_PATH")
+    def test_raises_for_missing_yt_dlp(self, mock_ytdlp_path, mock_which):
         """Deve lancar erro quando yt-dlp nao existe."""
-        mock_run.side_effect = FileNotFoundError()
+        # Mock YTDLP_PATH para não existir
+        mock_ytdlp_path.exists.return_value = False
+        # Mock shutil.which para retornar None
+        mock_which.return_value = None
 
         with pytest.raises(ConversionError) as exc_info:
             download_youtube_segment(

@@ -4,6 +4,7 @@ Servico de conversao de video para GIF.
 Usa MoviePy para extrair trechos de video e converter para GIF 64x64.
 """
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple
@@ -13,11 +14,16 @@ from PIL import Image
 
 from app.config import (
     ALLOWED_VIDEO_TYPES,
+    FFMPEG_PATH,
     MAX_CONVERT_FRAMES,
     MAX_VIDEO_DURATION,
     PIXOO_SIZE,
     TEMP_DIR,
 )
+
+# Configurar FFmpeg bundled se disponível
+if FFMPEG_PATH.exists():
+    os.environ["IMAGEIO_FFMPEG_EXE"] = str(FFMPEG_PATH)
 from app.services.exceptions import ConversionError, VideoTooLongError
 from app.services.gif_converter import (
     ConvertOptions,

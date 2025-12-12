@@ -5,12 +5,13 @@ Usa yt-dlp para baixar trechos de video e converter para GIF.
 """
 
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from app.config import MAX_VIDEO_DURATION, TEMP_DIR
+from app.config import MAX_VIDEO_DURATION, TEMP_DIR, YTDLP_PATH
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
 from app.services.video_converter import convert_video_to_gif
 from app.services.gif_converter import ConvertOptions
@@ -18,6 +19,32 @@ from app.services.validators import (
     validate_youtube_url as _validate_youtube_url,
     sanitize_time_value,
 )
+
+
+def _get_ytdlp_command() -> str:
+    """
+    Retorna o comando yt-dlp (bundled ou sistema).
+
+    Prioridade:
+    1. Binario bundled em bin/yt-dlp
+    2. yt-dlp instalado no sistema
+
+    Returns:
+        Caminho para o executavel yt-dlp
+
+    Raises:
+        FileNotFoundError: Se yt-dlp nao for encontrado
+    """
+    # Tentar bundled primeiro
+    if YTDLP_PATH.exists():
+        return str(YTDLP_PATH)
+
+    # Fallback para sistema
+    system_ytdlp = shutil.which("yt-dlp")
+    if system_ytdlp:
+        return system_ytdlp
+
+    raise FileNotFoundError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
 
 
 @dataclass
@@ -67,9 +94,10 @@ def get_youtube_info(url: str) -> YouTubeInfo:
     video_id = validate_youtube_url(url)
 
     try:
+        ytdlp_cmd = _get_ytdlp_command()
         result = subprocess.run(
             [
-                "yt-dlp",
+                ytdlp_cmd,
                 "--dump-json",
                 "--no-download",
                 "--no-warnings",
@@ -97,8 +125,8 @@ def get_youtube_info(url: str) -> YouTubeInfo:
         raise ConversionError("Timeout ao obter info do video")
     except json.JSONDecodeError:
         raise ConversionError("Erro ao processar resposta do yt-dlp")
-    except FileNotFoundError:
-        raise ConversionError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
+    except FileNotFoundError as e:
+        raise ConversionError(str(e))
     except Exception as e:
         raise ConversionError(f"Erro ao obter info: {e}")
 
@@ -154,12 +182,14 @@ def download_youtube_segment(
         return f"{h:02d}:{m:02d}:{s:06.3f}"
 
     try:
+        ytdlp_cmd = _get_ytdlp_command()
+
         if progress_callback:
             progress_callback("downloading", 0)
 
         result = subprocess.run(
             [
-                "yt-dlp",
+                ytdlp_cmd,
                 "-f", "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                 "--download-sections", f"*{format_time(start)}-{format_time(end)}",
                 "--force-keyframes-at-cuts",
@@ -184,7 +214,7 @@ def download_youtube_segment(
 
             result = subprocess.run(
                 [
-                    "yt-dlp",
+                    ytdlp_cmd,
                     "-f", "best[ext=mp4]/best",
                     "-o", str(full_video_path),
                     "--no-warnings",
@@ -237,8 +267,8 @@ def download_youtube_segment(
 
     except subprocess.TimeoutExpired:
         raise ConversionError("Timeout no download do video")
-    except FileNotFoundError:
-        raise ConversionError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
+    except FileNotFoundError as e:
+        raise ConversionError(str(e))
     except ConversionError:
         raise
     except Exception as e:

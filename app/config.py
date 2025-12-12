@@ -28,3 +28,42 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 # Diretório temporário - usa temp do sistema
 import tempfile
 TEMP_DIR = Path(tempfile.gettempdir()) / "pixoo_manager"
+
+
+# ============================================
+# Bundled binaries (PyInstaller support)
+# ============================================
+import sys
+
+
+def get_bundled_path(relative_path: str) -> Path:
+    """
+    Retorna caminho para arquivo bundled.
+
+    Funciona tanto em desenvolvimento quanto quando empacotado com PyInstaller.
+    Em dev: usa BASE_DIR como base
+    Em frozen: usa sys._MEIPASS (diretório temporário do PyInstaller)
+
+    Args:
+        relative_path: Caminho relativo ao diretório base
+
+    Returns:
+        Path absoluto para o arquivo
+    """
+    if getattr(sys, 'frozen', False):
+        # Executando como app empacotado
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Executando em desenvolvimento
+        base_path = BASE_DIR
+    return base_path / relative_path
+
+
+def is_frozen() -> bool:
+    """Retorna True se executando como app empacotado (PyInstaller)."""
+    return getattr(sys, 'frozen', False)
+
+
+# Caminhos para binários bundled
+FFMPEG_PATH = get_bundled_path("bin/ffmpeg")
+YTDLP_PATH = get_bundled_path("bin/yt-dlp")
