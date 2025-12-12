@@ -31,6 +31,7 @@ from app.services.exceptions import (
     PixooConnectionError,
     UploadError,
 )
+from app.middleware import upload_limiter, check_rate_limit
 
 router = APIRouter(prefix="/api/gif", tags=["gif"])
 
@@ -70,7 +71,10 @@ async def upload_gif_file(file: UploadFile = File(...)):
 
     Se o GIF não estiver em 64x64, será convertido automaticamente.
     Retorna um ID para uso posterior no envio.
+
+    Rate limited: 10 requisições por minuto.
     """
+    check_rate_limit(upload_limiter)
     # Validar e salvar arquivo temporário
     try:
         temp_path = await stream_upload_to_temp(

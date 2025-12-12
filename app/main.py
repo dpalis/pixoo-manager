@@ -5,6 +5,8 @@ Execute com: python -m app.main
 O navegador abrirá automaticamente em http://127.0.0.1:8000
 """
 
+import os
+import shutil
 import webbrowser
 from contextlib import asynccontextmanager
 
@@ -13,18 +15,49 @@ from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR
+from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR, TEMP_DIR
 from app.routers import connection as connection_router
 from app.routers import gif_upload as gif_router
 from app.routers import media_upload as media_router
 from app.routers import youtube as youtube_router
+from app.middleware import CSRFMiddleware
+
+
+# Modo headless (sem abrir browser) para testes/automação
+HEADLESS = os.getenv("PIXOO_HEADLESS", "false").lower() == "true"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Abre o navegador quando o servidor inicia."""
-    webbrowser.open(f"http://{HOST}:{PORT}")
+    """
+    Gerencia ciclo de vida da aplicação.
+
+    Startup: Abre browser (se não headless)
+    Shutdown: Limpa arquivos temporários e desconecta do Pixoo
+    """
+    # Startup
+    if not HEADLESS:
+        webbrowser.open(f"http://{HOST}:{PORT}")
+
     yield
+
+    # Shutdown cleanup
+    try:
+        # Desconecta do Pixoo
+        from app.services.pixoo_connection import get_pixoo_connection
+        conn = get_pixoo_connection()
+        if conn.is_connected:
+            conn.disconnect()
+            print("Desconectado do Pixoo")
+
+        # Limpa diretório temporário
+        if TEMP_DIR.exists():
+            shutil.rmtree(TEMP_DIR, ignore_errors=True)
+            print(f"Diretório temporário limpo: {TEMP_DIR}")
+
+        print("Cleanup concluído com sucesso")
+    except Exception as e:
+        print(f"Erro no cleanup: {e}")
 
 
 app = FastAPI(
@@ -32,6 +65,10 @@ app = FastAPI(
     description="Gerenciador de conteúdo para Divoom Pixoo 64",
     lifespan=lifespan,
 )
+
+
+# Middleware de proteção CSRF
+app.add_middleware(CSRFMiddleware)
 
 
 # Headers de segurança HTTP

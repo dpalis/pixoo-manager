@@ -4,16 +4,19 @@ Servico de download de videos do YouTube.
 Usa yt-dlp para baixar trechos de video e converter para GIF.
 """
 
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from app.config import MAX_VIDEO_DURATION, TEMP_DIR
-from app.services.exceptions import ConversionError, VideoTooLongError
+from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
 from app.services.video_converter import convert_video_to_gif
 from app.services.gif_converter import ConvertOptions
+from app.services.validators import (
+    validate_youtube_url as _validate_youtube_url,
+    sanitize_time_value,
+)
 
 
 @dataclass
@@ -30,27 +33,21 @@ def validate_youtube_url(url: str) -> str:
     """
     Valida e extrai o ID do video do YouTube.
 
+    Usa validação rigorosa para prevenir command injection.
+
     Args:
         url: URL do YouTube
 
     Returns:
-        ID do video
+        ID do video (11 caracteres)
 
     Raises:
         ConversionError: Se URL invalida
     """
-    patterns = [
-        r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
-        r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
-        r'youtube\.com/v/([a-zA-Z0-9_-]{11})',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-
-    raise ConversionError("URL do YouTube invalida")
+    try:
+        return _validate_youtube_url(url)
+    except ValidationError as e:
+        raise ConversionError(str(e))
 
 
 def get_youtube_info(url: str) -> YouTubeInfo:
@@ -128,6 +125,13 @@ def download_youtube_segment(
         VideoTooLongError: Se o trecho for maior que MAX_VIDEO_DURATION
         ConversionError: Se o download falhar
     """
+    # Sanitiza valores de tempo para prevenir command injection
+    try:
+        start = sanitize_time_value(start, max_duration=36000.0)  # Max 10h
+        end = sanitize_time_value(end, max_duration=36000.0)
+    except ValidationError as e:
+        raise ConversionError(str(e))
+
     duration = end - start
 
     if duration > MAX_VIDEO_DURATION:

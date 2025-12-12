@@ -38,6 +38,7 @@ from app.services.exceptions import (
     UploadError,
     VideoTooLongError,
 )
+from app.middleware import convert_limiter, upload_limiter, check_rate_limit
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -90,7 +91,10 @@ async def upload_media(file: UploadFile = File(...)):
 
     Imagens sao convertidas automaticamente para 64x64.
     Videos retornam metadados para selecao de trecho.
+
+    Rate limited: 10 requisições por minuto.
     """
+    check_rate_limit(upload_limiter)
     # Determinar tipo do arquivo
     content_type = file.content_type or ""
     is_image = content_type in ALLOWED_IMAGE_TYPES
@@ -218,7 +222,10 @@ async def convert_video(request: ConvertRequest):
     Converte segmento de video para GIF 64x64.
 
     Retorna SSE com progresso da conversao.
+
+    Rate limited: 5 requisições por minuto (CPU intensivo).
     """
+    check_rate_limit(convert_limiter)
     if request.id not in _uploads:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 
@@ -311,7 +318,10 @@ async def convert_video_sync(request: ConvertRequest):
     Converte segmento de video para GIF 64x64 (sincrono).
 
     Alternativa ao endpoint SSE para clientes simples.
+
+    Rate limited: 5 requisições por minuto (CPU intensivo).
     """
+    check_rate_limit(convert_limiter)
     if request.id not in _uploads:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 

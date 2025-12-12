@@ -39,3 +39,13 @@ class VideoTooLongError(ConversionError):
 class TooManyFramesError(ConversionError):
     """GIF excede número máximo de frames."""
     pass
+
+
+class ValidationError(PixooError):
+    """Erro de validação de entrada do usuário."""
+    pass
+
+
+class RateLimitError(PixooError):
+    """Limite de requisições excedido."""
+    pass

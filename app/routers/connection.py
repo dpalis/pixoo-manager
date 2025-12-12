@@ -12,7 +12,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.pixoo_connection import get_pixoo_connection
-from app.services.exceptions import PixooConnectionError
+from app.services.exceptions import PixooConnectionError, ValidationError
+from app.services.validators import validate_pixoo_ip
+from app.middleware import discover_limiter, check_rate_limit
 
 router = APIRouter(prefix="/api", tags=["connection"])
 
@@ -39,7 +41,12 @@ async def discover_devices():
     Busca dispositivos Pixoo na rede local.
 
     Tenta descoberta via mDNS primeiro, depois scan de rede como fallback.
+
+    Rate limited: 3 requisições por minuto (operação intensiva).
     """
+    # Rate limit: descoberta cria muitas threads
+    check_rate_limit(discover_limiter)
+
     conn = get_pixoo_connection()
     devices = conn.discover(timeout=3.0)
     return DiscoverResponse(devices=devices)
@@ -50,13 +57,20 @@ async def connect_to_pixoo(request: ConnectRequest):
     """
     Conecta ao Pixoo no IP especificado.
 
+    Valida o IP antes de conectar para prevenir SSRF.
     Testa a conexão antes de confirmar.
     """
+    # Validação de segurança: previne SSRF
+    try:
+        validated_ip = validate_pixoo_ip(request.ip)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     conn = get_pixoo_connection()
 
     try:
-        conn.connect(request.ip)
-        return {"success": True, "ip": request.ip}
+        conn.connect(validated_ip)
+        return {"success": True, "ip": validated_ip}
     except PixooConnectionError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

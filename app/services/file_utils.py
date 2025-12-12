@@ -4,10 +4,14 @@ Utilitários para manipulação de arquivos em endpoints.
 Adaptado do PDFTools com suporte para tipos de mídia do Pixoo Manager.
 """
 
+import logging
 import re
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from threading import Lock
+from time import time
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException, UploadFile
 
@@ -19,6 +23,9 @@ from app.config import (
     TEMP_DIR,
 )
 from app.services.exceptions import InvalidFileError
+
+
+logger = logging.getLogger(__name__)
 
 
 # Magic bytes para validação de tipo real de arquivo
@@ -200,19 +207,117 @@ def create_temp_output(suffix: str = ".gif") -> Path:
         return Path(temp.name)
 
 
+class FileTracker:
+    """
+    Rastreador de arquivos com reference counting para cleanup seguro.
+
+    Evita race conditions onde um arquivo é deletado enquanto está em uso.
+    """
+
+    # TTL padrão de 1 hora para arquivos não referenciados
+    DEFAULT_TTL = 3600
+
+    def __init__(self):
+        self._refs: Dict[Path, int] = {}
+        self._timestamps: Dict[Path, float] = {}
+        self._lock = Lock()
+
+    def acquire(self, path: Path) -> None:
+        """
+        Marca um arquivo como em uso.
+
+        Args:
+            path: Caminho do arquivo
+        """
+        with self._lock:
+            self._refs[path] = self._refs.get(path, 0) + 1
+            self._timestamps[path] = time()
+
+    def release(self, path: Path) -> bool:
+        """
+        Libera uma referência ao arquivo.
+
+        Args:
+            path: Caminho do arquivo
+
+        Returns:
+            True se o arquivo pode ser deletado (refs == 0)
+        """
+        with self._lock:
+            if path not in self._refs:
+                return True
+
+            self._refs[path] = self._refs.get(path, 1) - 1
+
+            if self._refs[path] <= 0:
+                del self._refs[path]
+                if path in self._timestamps:
+                    del self._timestamps[path]
+                return True
+
+            return False
+
+    def is_in_use(self, path: Path) -> bool:
+        """Verifica se um arquivo está em uso."""
+        with self._lock:
+            return self._refs.get(path, 0) > 0
+
+    def get_stale_files(self, ttl: int = DEFAULT_TTL) -> List[Path]:
+        """
+        Retorna arquivos que não são referenciados há mais de TTL segundos.
+
+        Args:
+            ttl: Time-to-live em segundos
+
+        Returns:
+            Lista de caminhos de arquivos stale
+        """
+        now = time()
+        stale = []
+
+        with self._lock:
+            for path, timestamp in list(self._timestamps.items()):
+                if now - timestamp > ttl and self._refs.get(path, 0) == 0:
+                    stale.append(path)
+
+        return stale
+
+
+# Instância global do tracker
+file_tracker = FileTracker()
+
+
 def cleanup_files(paths: List[Path]) -> None:
     """
     Remove lista de arquivos de forma segura.
+
+    Verifica se os arquivos não estão em uso antes de deletar.
+    Loga erros ao invés de ignorá-los silenciosamente.
 
     Args:
         paths: Lista de caminhos para remover
     """
     for path in paths:
         try:
-            if path and path.exists():
+            if not path:
+                continue
+
+            # Verifica se arquivo está em uso
+            if file_tracker.is_in_use(path):
+                logger.debug(f"Arquivo em uso, não deletado: {path}")
+                continue
+
+            if path.exists():
                 path.unlink()
-        except Exception:
-            pass  # Ignora erros de cleanup
+                logger.debug(f"Arquivo removido: {path}")
+
+        except PermissionError as e:
+            logger.warning(f"Permissão negada ao remover {path}: {e}")
+        except FileNotFoundError:
+            # Arquivo já foi removido, ok
+            pass
+        except Exception as e:
+            logger.warning(f"Erro ao remover {path}: {e}")
 
 
 async def cleanup_file_async(path: Path) -> None:
@@ -222,19 +327,22 @@ async def cleanup_file_async(path: Path) -> None:
     Args:
         path: Caminho do arquivo para remover
     """
-    try:
-        if path and path.exists():
-            path.unlink()
-    except Exception:
-        pass
+    cleanup_files([path] if path else [])
 
 
 def cleanup_temp_dir() -> None:
-    """Remove todos os arquivos do diretório temporário."""
-    if TEMP_DIR.exists():
-        for file in TEMP_DIR.iterdir():
-            try:
-                if file.is_file():
-                    file.unlink()
-            except Exception:
-                pass
+    """
+    Remove todos os arquivos do diretório temporário.
+
+    Respeita arquivos que estão em uso.
+    """
+    if not TEMP_DIR.exists():
+        return
+
+    for file in TEMP_DIR.iterdir():
+        try:
+            if file.is_file() and not file_tracker.is_in_use(file):
+                file.unlink()
+                logger.debug(f"Arquivo temporário removido: {file}")
+        except Exception as e:
+            logger.warning(f"Erro ao limpar {file}: {e}")

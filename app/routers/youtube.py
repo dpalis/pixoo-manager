@@ -30,6 +30,7 @@ from app.services.exceptions import (
     VideoTooLongError,
 )
 from app.services.file_utils import cleanup_files
+from app.middleware import youtube_limiter, check_rate_limit
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"])
 
@@ -108,7 +109,10 @@ async def download_video(request: DownloadRequest):
     Baixa trecho do video e converte para GIF 64x64.
 
     Limite maximo de 10 segundos por trecho.
+
+    Rate limited: 5 requisições por minuto (download + conversão).
     """
+    check_rate_limit(youtube_limiter)
     duration = request.end - request.start
 
     if duration > MAX_VIDEO_DURATION:

@@ -116,7 +116,11 @@ class PixooConnection:
         Scan de rede como fallback quando mDNS não funciona.
 
         Tenta conectar na porta 80 dos IPs comuns de rede local.
+        Usa ThreadPoolExecutor com limite de 20 workers para evitar
+        explosão de threads.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         devices: List[str] = []
 
         # Obtém o IP local para determinar a rede
@@ -131,8 +135,8 @@ class PixooConnection:
         # Extrai o prefixo da rede (ex: 192.168.1)
         network_prefix = ".".join(local_ip.split(".")[:-1])
 
-        # Scan paralelo dos IPs mais comuns (1-50 e 100-150)
-        def check_ip(ip: str):
+        def check_ip(ip: str) -> Optional[str]:
+            """Verifica se um IP é um Pixoo. Retorna o IP se encontrado."""
             try:
                 response = requests.post(
                     f"http://{ip}:80/post",
@@ -143,20 +147,29 @@ class PixooConnection:
                     data = response.json()
                     # Pixoo retorna error_code 0 em sucesso
                     if data.get("error_code") == 0:
-                        devices.append(ip)
+                        return ip
             except Exception:
                 pass
+            return None
 
-        threads = []
-        for i in list(range(1, 51)) + list(range(100, 151)):
-            ip = f"{network_prefix}.{i}"
-            t = threading.Thread(target=check_ip, args=(ip,))
-            t.start()
-            threads.append(t)
+        # Lista de IPs para verificar (1-50 e 100-150)
+        ips_to_check = [
+            f"{network_prefix}.{i}"
+            for i in list(range(1, 51)) + list(range(100, 151))
+        ]
 
-        # Aguardar todas as threads
-        for t in threads:
-            t.join()
+        # Usa ThreadPoolExecutor com máximo de 20 workers
+        # Isso evita explosão de threads e exaustão de recursos
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(check_ip, ip): ip for ip in ips_to_check}
+
+            for future in as_completed(futures, timeout=30):
+                try:
+                    result = future.result()
+                    if result:
+                        devices.append(result)
+                except Exception:
+                    pass
 
         return devices
 
