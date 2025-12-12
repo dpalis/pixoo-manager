@@ -262,12 +262,119 @@
 
             {% elif active_tab == 'youtube' %}
             <!-- Tab: YouTube -->
-            <div class="tab-content">
+            <div class="tab-content" x-data="youtubeDownload()">
                 <h2>YouTube para Pixoo</h2>
-                <p class="description">Baixe um trecho de video do YouTube e converta para GIF 64x64.</p>
-                <div class="placeholder">
-                    <p>Esta funcionalidade sera implementada na Fase 5.</p>
+                <p class="description">Baixe um trecho de video do YouTube (max 10s) e converta para GIF 64x64.</p>
+
+                <!-- Campo de URL -->
+                <div class="url-input-section" x-show="!videoInfo">
+                    <div class="url-input">
+                        <input
+                            type="text"
+                            x-model="url"
+                            placeholder="Cole a URL do YouTube aqui..."
+                            @keyup.enter="fetchInfo()"
+                        >
+                        <button @click="fetchInfo()" :disabled="!url || loading">
+                            <span x-show="!loading">Buscar</span>
+                            <span x-show="loading">Buscando...</span>
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Info do video -->
+                <template x-if="videoInfo">
+                    <div class="video-info-card">
+                        <img :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
+                        <div class="video-details">
+                            <h3 x-text="videoInfo.title"></h3>
+                            <p class="channel" x-text="videoInfo.channel"></p>
+                            <p class="duration">Duracao: <span x-text="formatDuration(videoInfo.duration)"></span></p>
+                        </div>
+                        <button class="clear-btn" @click="clearVideo()">X</button>
+                    </div>
+                </template>
+
+                <!-- Timeline de selecao -->
+                <template x-if="videoInfo">
+                    <div class="timeline-controls">
+                        <div class="time-inputs">
+                            <label>
+                                Inicio:
+                                <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00.00">
+                            </label>
+                            <label>
+                                Fim:
+                                <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10.00">
+                            </label>
+                            <span class="duration-label" :class="{ 'error': segmentTooLong }">
+                                Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
+                                <span x-show="segmentTooLong">(max 10s)</span>
+                            </span>
+                        </div>
+
+                        <div class="timeline-slider">
+                            <input
+                                type="range"
+                                min="0"
+                                :max="videoInfo.duration"
+                                step="0.1"
+                                x-model="startTime"
+                                @input="updateStartTime()"
+                                class="range-start"
+                            >
+                            <input
+                                type="range"
+                                min="0"
+                                :max="videoInfo.duration"
+                                step="0.1"
+                                x-model="endTime"
+                                @input="updateEndTime()"
+                                class="range-end"
+                            >
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Progresso -->
+                <div class="progress-section" x-show="downloading">
+                    <div class="progress-bar">
+                        <div class="progress-fill" :style="`width: ${downloadProgress}%`"></div>
+                    </div>
+                    <p class="progress-text" x-text="downloadPhase"></p>
+                </div>
+
+                <!-- Preview do GIF -->
+                <template x-if="previewUrl">
+                    <div class="converted-preview">
+                        <h4>Preview do GIF</h4>
+                        <img :src="previewUrl" alt="GIF convertido" class="gif-preview">
+                        <p x-text="`${convertedFrames} frames`"></p>
+                    </div>
+                </template>
+
+                <!-- Acoes -->
+                <div class="actions" x-show="videoInfo">
+                    <button @click="clearVideo()" class="secondary">Limpar</button>
+                    <button
+                        x-show="!downloadId"
+                        @click="downloadAndConvert()"
+                        :disabled="downloading || segmentTooLong"
+                        class="primary"
+                    >
+                        Baixar e Converter
+                    </button>
+                    <button
+                        x-show="downloadId"
+                        @click="sendToPixoo()"
+                        :disabled="sending"
+                        class="primary"
+                    >
+                        Enviar para Pixoo
+                    </button>
+                </div>
+
+                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
             </div>
             {% endif %}
         </section>

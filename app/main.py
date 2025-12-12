@@ -17,6 +17,7 @@ from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR
 from app.routers import connection as connection_router
 from app.routers import gif_upload as gif_router
 from app.routers import media_upload as media_router
+from app.routers import youtube as youtube_router
 
 
 @asynccontextmanager
@@ -75,6 +76,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 app.include_router(connection_router.router)
 app.include_router(gif_router.router)
 app.include_router(media_router.router)
+app.include_router(youtube_router.router)
 
 
 # Rotas de páginas

@@ -525,6 +525,211 @@ function mediaUpload() {
 }
 
 // ============================================
+// YouTube Download Component
+// ============================================
+function youtubeDownload() {
+    return {
+        url: '',
+        loading: false,
+        videoInfo: null,
+        startTime: 0,
+        endTime: 10,
+        startTimeStr: '00:00.00',
+        endTimeStr: '00:10.00',
+        downloading: false,
+        downloadProgress: 0,
+        downloadPhase: '',
+        downloadId: null,
+        previewUrl: null,
+        convertedFrames: 0,
+        sending: false,
+        message: '',
+        messageType: '',
+
+        get segmentDuration() {
+            return Math.max(0, this.endTime - this.startTime);
+        },
+
+        get segmentTooLong() {
+            return this.segmentDuration > 10;
+        },
+
+        formatDuration(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        },
+
+        async fetchInfo() {
+            if (!this.url) return;
+
+            this.loading = true;
+            this.clearMessage();
+
+            try {
+                const response = await fetch('/api/youtube/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: this.url })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro ao buscar video', 'error');
+                    return;
+                }
+
+                this.videoInfo = await response.json();
+                this.endTime = Math.min(10, this.videoInfo.duration);
+                this.endTimeStr = this.formatTime(this.endTime);
+
+            } catch (e) {
+                console.error('Erro:', e);
+                this.showMessage('Erro ao buscar video', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        updateStartTime() {
+            this.startTime = parseFloat(this.startTime);
+            if (this.startTime >= this.endTime) {
+                this.startTime = Math.max(0, this.endTime - 0.1);
+            }
+            this.startTimeStr = this.formatTime(this.startTime);
+        },
+
+        updateEndTime() {
+            this.endTime = parseFloat(this.endTime);
+            if (this.endTime <= this.startTime) {
+                this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
+            }
+            this.endTimeStr = this.formatTime(this.endTime);
+        },
+
+        parseStartTime() {
+            const seconds = this.parseTimeStr(this.startTimeStr);
+            if (seconds !== null && this.videoInfo) {
+                this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
+                this.startTimeStr = this.formatTime(this.startTime);
+            }
+        },
+
+        parseEndTime() {
+            const seconds = this.parseTimeStr(this.endTimeStr);
+            if (seconds !== null && this.videoInfo) {
+                this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoInfo.duration));
+                this.endTimeStr = this.formatTime(this.endTime);
+            }
+        },
+
+        parseTimeStr(str) {
+            const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+            if (!match) return null;
+            const mins = parseInt(match[1] || '0');
+            const secs = parseFloat(match[2]);
+            return mins * 60 + secs;
+        },
+
+        formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = (seconds % 60).toFixed(2);
+            return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
+        },
+
+        async downloadAndConvert() {
+            if (!this.videoInfo || this.segmentTooLong) return;
+
+            this.downloading = true;
+            this.downloadProgress = 0;
+            this.downloadPhase = 'Baixando e convertendo...';
+
+            try {
+                const response = await fetch('/api/youtube/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: this.url,
+                        start: this.startTime,
+                        end: this.endTime
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro no download', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                this.downloadId = data.id;
+                this.previewUrl = data.preview_url;
+                this.convertedFrames = data.frames;
+                this.showMessage(`Convertido! ${data.frames} frames`, 'success');
+
+            } catch (e) {
+                console.error('Erro:', e);
+                this.showMessage('Erro no download', 'error');
+            } finally {
+                this.downloading = false;
+            }
+        },
+
+        async sendToPixoo() {
+            if (!this.downloadId) return;
+
+            this.sending = true;
+            try {
+                this.showMessage('Enviando para Pixoo...', 'info');
+
+                const response = await fetch('/api/youtube/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: this.downloadId })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    this.showMessage(`Enviado! ${data.frames_sent} frames`, 'success');
+                } else {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro:', e);
+                this.showMessage('Erro ao enviar para Pixoo', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        clearVideo() {
+            this.url = '';
+            this.videoInfo = null;
+            this.startTime = 0;
+            this.endTime = 10;
+            this.startTimeStr = '00:00.00';
+            this.endTimeStr = '00:10.00';
+            this.downloading = false;
+            this.downloadId = null;
+            this.previewUrl = null;
+            this.convertedFrames = 0;
+            this.clearMessage();
+        },
+
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+        },
+
+        clearMessage() {
+            this.message = '';
+            this.messageType = '';
+        }
+    };
+}
+
+// ============================================
 // Utility Functions
 // ============================================
 
