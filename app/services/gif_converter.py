@@ -159,7 +159,9 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
         channel_avg = channel_sum / neighbor_count
         result[:, :, c] = np.where(is_halo, channel_avg, img_array[:, :, c])
 
-    return Image.fromarray(result.astype(np.uint8), mode='RGB')
+    # Pillow 12+ deprecou o parâmetro mode em fromarray
+    img = Image.fromarray(result.astype(np.uint8))
+    return img.convert('RGB') if img.mode != 'RGB' else img
 
 
 def adaptive_downscale(
@@ -278,7 +280,9 @@ def darken_background(
 
     img_array = np.clip(img_array, 0, 255).astype(np.uint8)
 
-    return Image.fromarray(img_array, mode='RGB')
+    # Pillow 12+ deprecou o parâmetro mode em fromarray
+    img = Image.fromarray(img_array)
+    return img.convert('RGB') if img.mode != 'RGB' else img
 
 
 def focus_on_center(image: Image.Image, vignette_strength: float = 0.3) -> Image.Image:
@@ -315,7 +319,9 @@ def focus_on_center(image: Image.Image, vignette_strength: float = 0.3) -> Image
 
     img_array = np.clip(img_array, 0, 255).astype(np.uint8)
 
-    return Image.fromarray(img_array, mode='RGB')
+    # Pillow 12+ deprecou o parâmetro mode em fromarray
+    img = Image.fromarray(img_array)
+    return img.convert('RGB') if img.mode != 'RGB' else img
 
 
 def quantize_colors(image: Image.Image, num_colors: int = 32) -> Image.Image:
@@ -492,10 +498,12 @@ def convert_gif(
         avg_duration = sum(durations) / len(durations)
         fps = 1000 / avg_duration if avg_duration > 0 else 10
 
+        # imageio v3 deprecou fps, usar duration (ms por frame)
+        duration_ms = int(1000 / fps) if fps > 0 else 100
         iio.imwrite(
             output_path,
             frame_arrays,
-            fps=fps,
+            duration=duration_ms,
             loop=0  # Loop infinito
         )
 
@@ -543,5 +551,7 @@ def create_preview(input_path: Path, scale: int = 4) -> bytes:
     # Salvar para bytes
     import io
     buffer = io.BytesIO()
-    iio.imwrite(buffer, scaled_frames, extension=".gif", fps=fps, loop=0)
+    # imageio v3 deprecou fps, usar duration (ms por frame)
+    duration_ms = int(1000 / fps) if fps > 0 else 100
+    iio.imwrite(buffer, scaled_frames, extension=".gif", duration=duration_ms, loop=0)
     return buffer.getvalue()
