@@ -432,13 +432,57 @@ def is_pixoo_ready(path: Path) -> bool:
         return False
 
 
-def convert_image(image: Image.Image, options: Optional[ConvertOptions] = None) -> Image.Image:
+def convert_image(
+    input_path: Path,
+    options: Optional[ConvertOptions] = None
+) -> Tuple[Path, GifMetadata]:
     """
-    Converte uma única imagem para formato Pixoo.
+    Converte uma imagem para formato Pixoo 64x64.
+
+    Args:
+        input_path: Caminho da imagem de entrada
+        options: Opcoes de conversao
+
+    Returns:
+        Tupla (caminho do GIF convertido, metadados)
+    """
+    if options is None:
+        options = ConvertOptions()
+
+    try:
+        with Image.open(input_path) as img:
+            converted = convert_image_pil(img, options)
+    except Exception as e:
+        raise ConversionError(f"Falha ao carregar imagem: {e}")
+
+    # Criar arquivo de saida como GIF
+    output_path = create_temp_output(".gif")
+
+    try:
+        converted.save(output_path, format="GIF")
+
+        metadata = GifMetadata(
+            width=PIXOO_SIZE,
+            height=PIXOO_SIZE,
+            frames=1,
+            duration_ms=0,
+            file_size=output_path.stat().st_size,
+            path=output_path
+        )
+
+        return output_path, metadata
+
+    except Exception as e:
+        raise ConversionError(f"Falha ao salvar imagem: {e}")
+
+
+def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = None) -> Image.Image:
+    """
+    Converte uma imagem PIL para formato Pixoo.
 
     Args:
         image: Imagem PIL
-        options: Opções de conversão
+        options: Opcoes de conversao
 
     Returns:
         Imagem convertida para 64x64
@@ -515,7 +559,7 @@ def convert_gif(
         if progress_callback:
             progress_callback(i + 1, total_frames)
 
-        converted = convert_image(frame, options)
+        converted = convert_image_pil(frame, options)
         converted_frames.append(converted)
 
     # Criar arquivo de saída
