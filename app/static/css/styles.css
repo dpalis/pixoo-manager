@@ -321,6 +321,141 @@ button.secondary:hover {
 }
 
 /* ============================================
+   Video Editor
+   ============================================ */
+.video-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.video-preview {
+    width: 100%;
+    max-height: 300px;
+    border-radius: 0.5rem;
+    background: #000;
+}
+
+.timeline-controls {
+    background: var(--bg-dark);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.time-inputs {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.time-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.time-inputs input[type="text"] {
+    width: 100px;
+    padding: 0.25rem 0.5rem;
+    margin: 0;
+    font-family: monospace;
+}
+
+.duration-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+
+.duration-label.error {
+    color: var(--pixoo-red);
+    font-weight: bold;
+}
+
+.timeline-slider {
+    position: relative;
+    height: 30px;
+}
+
+.timeline-slider input[type="range"] {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    margin: 0;
+    pointer-events: none;
+    background: transparent;
+}
+
+.timeline-slider input[type="range"]::-webkit-slider-thumb {
+    pointer-events: auto;
+}
+
+.timeline-slider input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+}
+
+.range-start::-webkit-slider-thumb {
+    background: var(--pixoo-green);
+}
+
+.range-end::-webkit-slider-thumb {
+    background: var(--pixoo-red);
+}
+
+/* Progress Section */
+.progress-section {
+    padding: 1rem;
+    background: var(--bg-dark);
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--pixoo-blue), var(--pixoo-purple));
+    transition: width 0.2s;
+}
+
+.progress-text {
+    margin: 0.5rem 0 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* Converted Preview */
+.converted-preview {
+    text-align: center;
+    padding: 1rem;
+    background: var(--bg-dark);
+    border-radius: 0.5rem;
+    border: 1px solid var(--pixoo-green);
+}
+
+.converted-preview h4 {
+    margin: 0 0 1rem;
+    color: var(--pixoo-green);
+}
+
+.converted-preview p {
+    margin: 0.5rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* ============================================
    Placeholder (para tabs nao implementadas)
    ============================================ */
 .placeholder {

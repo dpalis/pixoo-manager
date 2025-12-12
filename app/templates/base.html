@@ -126,12 +126,138 @@
 
             {% elif active_tab == 'media' %}
             <!-- Tab: Foto/Video -->
-            <div class="tab-content">
+            <div class="tab-content" x-data="mediaUpload()">
                 <h2>Foto/Video para Pixoo</h2>
-                <p class="description">Converta fotos ou trechos de video para GIF 64x64.</p>
-                <div class="placeholder">
-                    <p>Esta funcionalidade sera implementada na Fase 4.</p>
+                <p class="description">Converta fotos ou trechos de video (max 10s) para GIF 64x64.</p>
+
+                <!-- Zona de upload -->
+                <div
+                    class="drop-zone"
+                    :class="{ 'drag-over': dragOver, 'has-file': hasFile }"
+                    @dragover.prevent="dragOver = true"
+                    @dragleave.prevent="dragOver = false"
+                    @drop.prevent="handleDrop($event)"
+                    @click="$refs.mediaInput.click()"
+                    x-show="!hasFile"
+                >
+                    <input
+                        type="file"
+                        x-ref="mediaInput"
+                        accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
+                        @change="handleFileSelect($event)"
+                        style="display: none"
+                    >
+                    <div class="drop-zone-content">
+                        <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                        </svg>
+                        <p>Arraste uma foto ou video aqui</p>
+                    </div>
                 </div>
+
+                <!-- Preview de imagem -->
+                <template x-if="mediaType === 'image' && previewUrl">
+                    <div class="preview-container">
+                        <img :src="previewUrl" alt="Preview" class="gif-preview">
+                        <div class="file-info">
+                            <p x-text="fileName"></p>
+                            <p x-text="fileInfo"></p>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Preview de video -->
+                <template x-if="mediaType === 'video'">
+                    <div class="video-editor">
+                        <video
+                            x-ref="videoPlayer"
+                            :src="videoUrl"
+                            @loadedmetadata="onVideoLoaded()"
+                            @timeupdate="onTimeUpdate()"
+                            controls
+                            class="video-preview"
+                        ></video>
+
+                        <div class="timeline-controls">
+                            <div class="time-inputs">
+                                <label>
+                                    Inicio:
+                                    <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00.00">
+                                </label>
+                                <label>
+                                    Fim:
+                                    <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10.00">
+                                </label>
+                                <span class="duration-label" :class="{ 'error': segmentTooLong }">
+                                    Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
+                                    <span x-show="segmentTooLong">(max 10s)</span>
+                                </span>
+                            </div>
+
+                            <div class="timeline-slider">
+                                <input
+                                    type="range"
+                                    min="0"
+                                    :max="videoDuration"
+                                    step="0.1"
+                                    x-model="startTime"
+                                    @input="updateStartTime()"
+                                    class="range-start"
+                                >
+                                <input
+                                    type="range"
+                                    min="0"
+                                    :max="videoDuration"
+                                    step="0.1"
+                                    x-model="endTime"
+                                    @input="updateEndTime()"
+                                    class="range-end"
+                                >
+                            </div>
+                        </div>
+
+                        <!-- Progresso de conversao -->
+                        <div class="progress-section" x-show="converting">
+                            <div class="progress-bar">
+                                <div class="progress-fill" :style="`width: ${convertProgress}%`"></div>
+                            </div>
+                            <p class="progress-text" x-text="convertPhase"></p>
+                        </div>
+
+                        <!-- Preview do GIF convertido -->
+                        <template x-if="convertedPreviewUrl">
+                            <div class="converted-preview">
+                                <h4>Preview do GIF</h4>
+                                <img :src="convertedPreviewUrl" alt="GIF convertido" class="gif-preview">
+                                <p x-text="`${convertedFrames} frames`"></p>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Acoes -->
+                <div class="actions" x-show="hasFile">
+                    <button @click="clearFile()" class="secondary">Limpar</button>
+                    <button
+                        x-show="mediaType === 'video' && !converted"
+                        @click="convertVideo()"
+                        :disabled="converting || segmentTooLong"
+                        class="primary"
+                    >
+                        Converter para GIF
+                    </button>
+                    <button
+                        x-show="canSend"
+                        @click="sendToPixoo()"
+                        :disabled="sending"
+                        class="primary"
+                    >
+                        Enviar para Pixoo
+                    </button>
+                </div>
+
+                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
             </div>
 
             {% elif active_tab == 'youtube' %}

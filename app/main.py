@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR
 from app.routers import connection as connection_router
 from app.routers import gif_upload as gif_router
+from app.routers import media_upload as media_router
 
 
 @asynccontextmanager
@@ -73,6 +74,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 # Registra routers da API
 app.include_router(connection_router.router)
 app.include_router(gif_router.router)
+app.include_router(media_router.router)
 
 
 # Rotas de páginas

@@ -249,6 +249,282 @@ function gifUpload() {
 }
 
 // ============================================
+// Media Upload Component (Foto/Video)
+// ============================================
+function mediaUpload() {
+    return {
+        dragOver: false,
+        file: null,
+        uploadId: null,
+        mediaType: null, // 'image' ou 'video'
+        fileName: '',
+        fileInfo: '',
+        previewUrl: null,
+        videoUrl: null,
+        videoDuration: 0,
+        startTime: 0,
+        endTime: 10,
+        startTimeStr: '00:00.00',
+        endTimeStr: '00:10.00',
+        converting: false,
+        convertProgress: 0,
+        convertPhase: '',
+        converted: false,
+        convertedPreviewUrl: null,
+        convertedFrames: 0,
+        sending: false,
+        message: '',
+        messageType: '',
+
+        get hasFile() {
+            return this.uploadId !== null;
+        },
+
+        get segmentDuration() {
+            return Math.max(0, this.endTime - this.startTime);
+        },
+
+        get segmentTooLong() {
+            return this.segmentDuration > 10;
+        },
+
+        get canSend() {
+            return (this.mediaType === 'image' && this.uploadId) ||
+                   (this.mediaType === 'video' && this.converted);
+        },
+
+        handleDrop(event) {
+            this.dragOver = false;
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                this.processFile(files[0]);
+            }
+        },
+
+        handleFileSelect(event) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                this.processFile(files[0]);
+            }
+        },
+
+        async processFile(file) {
+            const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+            const videoTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
+
+            if (!imageTypes.includes(file.type) && !videoTypes.includes(file.type)) {
+                this.showMessage('Formato nao suportado. Use PNG, JPEG, WebP, MP4, MOV ou WebM.', 'error');
+                return;
+            }
+
+            this.file = file;
+            this.fileName = file.name;
+
+            // Upload para o servidor
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                this.showMessage('Enviando arquivo...', 'info');
+
+                const response = await fetch('/api/media/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro no upload', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                this.uploadId = data.id;
+                this.mediaType = data.type;
+
+                if (data.type === 'image') {
+                    this.previewUrl = data.preview_url;
+                    this.fileInfo = `${data.width}x${data.height}`;
+                    this.converted = true; // Imagens ja vem convertidas
+                    this.clearMessage();
+                } else {
+                    this.videoUrl = URL.createObjectURL(file);
+                    this.videoDuration = data.duration;
+                    this.endTime = Math.min(10, data.duration);
+                    this.endTimeStr = this.formatTime(this.endTime);
+                    this.fileInfo = `${data.width}x${data.height} - ${data.duration.toFixed(1)}s`;
+                    this.clearMessage();
+                }
+
+            } catch (e) {
+                console.error('Erro no upload:', e);
+                this.showMessage('Erro ao enviar arquivo', 'error');
+            }
+        },
+
+        onVideoLoaded() {
+            const video = this.$refs.videoPlayer;
+            if (video) {
+                this.videoDuration = video.duration;
+                this.endTime = Math.min(10, video.duration);
+                this.endTimeStr = this.formatTime(this.endTime);
+            }
+        },
+
+        onTimeUpdate() {
+            // Opcional: atualizar UI durante reproducao
+        },
+
+        updateStartTime() {
+            this.startTime = parseFloat(this.startTime);
+            if (this.startTime >= this.endTime) {
+                this.startTime = Math.max(0, this.endTime - 0.1);
+            }
+            this.startTimeStr = this.formatTime(this.startTime);
+        },
+
+        updateEndTime() {
+            this.endTime = parseFloat(this.endTime);
+            if (this.endTime <= this.startTime) {
+                this.endTime = Math.min(this.videoDuration, this.startTime + 0.1);
+            }
+            this.endTimeStr = this.formatTime(this.endTime);
+        },
+
+        parseStartTime() {
+            const seconds = this.parseTimeStr(this.startTimeStr);
+            if (seconds !== null) {
+                this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
+                this.startTimeStr = this.formatTime(this.startTime);
+            }
+        },
+
+        parseEndTime() {
+            const seconds = this.parseTimeStr(this.endTimeStr);
+            if (seconds !== null) {
+                this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoDuration));
+                this.endTimeStr = this.formatTime(this.endTime);
+            }
+        },
+
+        parseTimeStr(str) {
+            // Formato: MM:SS.ms ou SS.ms ou SS
+            const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+            if (!match) return null;
+            const mins = parseInt(match[1] || '0');
+            const secs = parseFloat(match[2]);
+            return mins * 60 + secs;
+        },
+
+        formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = (seconds % 60).toFixed(2);
+            return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
+        },
+
+        async convertVideo() {
+            if (!this.uploadId || this.segmentTooLong) return;
+
+            this.converting = true;
+            this.convertProgress = 0;
+            this.convertPhase = 'Iniciando...';
+
+            try {
+                // Usar endpoint sincrono por simplicidade
+                const response = await fetch('/api/media/convert-sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: this.uploadId,
+                        start: this.startTime,
+                        end: this.endTime
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro na conversao', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                this.converted = true;
+                this.convertedPreviewUrl = data.preview_url;
+                this.convertedFrames = data.frames;
+                this.showMessage(`Convertido! ${data.frames} frames`, 'success');
+
+            } catch (e) {
+                console.error('Erro na conversao:', e);
+                this.showMessage('Erro ao converter video', 'error');
+            } finally {
+                this.converting = false;
+            }
+        },
+
+        async sendToPixoo() {
+            if (!this.canSend) return;
+
+            this.sending = true;
+            try {
+                this.showMessage('Enviando para Pixoo...', 'info');
+
+                const response = await fetch('/api/media/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: this.uploadId })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    this.showMessage(`Enviado! ${data.frames_sent} frames`, 'success');
+                } else {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao enviar:', e);
+                this.showMessage('Erro ao enviar para Pixoo', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        clearFile() {
+            if (this.videoUrl) {
+                URL.revokeObjectURL(this.videoUrl);
+            }
+            this.file = null;
+            this.uploadId = null;
+            this.mediaType = null;
+            this.fileName = '';
+            this.fileInfo = '';
+            this.previewUrl = null;
+            this.videoUrl = null;
+            this.videoDuration = 0;
+            this.startTime = 0;
+            this.endTime = 10;
+            this.startTimeStr = '00:00.00';
+            this.endTimeStr = '00:10.00';
+            this.converting = false;
+            this.converted = false;
+            this.convertedPreviewUrl = null;
+            this.convertedFrames = 0;
+            this.clearMessage();
+        },
+
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+        },
+
+        clearMessage() {
+            this.message = '';
+            this.messageType = '';
+        }
+    };
+}
+
+// ============================================
 // Utility Functions
 // ============================================
 
