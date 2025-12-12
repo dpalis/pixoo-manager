@@ -8,8 +8,6 @@ Endpoints:
 """
 
 import uuid
-from pathlib import Path
-from typing import Dict
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -29,13 +27,10 @@ from app.services.exceptions import (
     UploadError,
     VideoTooLongError,
 )
-from app.services.file_utils import cleanup_files
 from app.middleware import youtube_limiter, check_rate_limit
+from app.services.upload_manager import youtube_downloads
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"])
-
-# Armazenamento temporario
-_downloads: Dict[str, dict] = {}
 
 
 class InfoRequest(BaseModel):
@@ -136,10 +131,10 @@ async def download_video(request: DownloadRequest):
 
         # Gerar ID e armazenar
         download_id = str(uuid.uuid4())[:8]
-        _downloads[download_id] = {
+        youtube_downloads.set(download_id, {
             "path": gif_path,
             "frames": frames
-        }
+        })
 
         return DownloadResponse(
             id=download_id,
@@ -158,14 +153,14 @@ async def download_video(request: DownloadRequest):
 @router.get("/preview/{download_id}")
 async def get_preview(download_id: str):
     """Retorna preview do GIF convertido."""
-    if download_id not in _downloads:
+    download = youtube_downloads.get(download_id)
+    if download is None:
         raise HTTPException(status_code=404, detail="Download nao encontrado")
 
-    download = _downloads[download_id]
     path = download["path"]
 
     if not path.exists():
-        del _downloads[download_id]
+        youtube_downloads.delete(download_id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     return FileResponse(
@@ -178,14 +173,14 @@ async def get_preview(download_id: str):
 @router.post("/send", response_model=SendResponse)
 async def send_to_pixoo(request: SendRequest):
     """Envia GIF convertido para o Pixoo."""
-    if request.id not in _downloads:
+    download = youtube_downloads.get(request.id)
+    if download is None:
         raise HTTPException(status_code=404, detail="Download nao encontrado")
 
-    download = _downloads[request.id]
     path = download["path"]
 
     if not path.exists():
-        del _downloads[request.id]
+        youtube_downloads.delete(request.id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     # Verificar conexao
@@ -212,11 +207,7 @@ async def send_to_pixoo(request: SendRequest):
 @router.delete("/{download_id}")
 async def delete_download(download_id: str):
     """Remove download e limpa arquivo temporario."""
-    if download_id not in _downloads:
+    if not youtube_downloads.delete(download_id):
         raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    download = _downloads[download_id]
-    cleanup_files([download["path"]])
-    del _downloads[download_id]
 
     return {"success": True}

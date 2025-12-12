@@ -179,11 +179,14 @@ def download_youtube_segment(
         if result.returncode != 0:
             # Tentar metodo alternativo sem --download-sections
             # (para versoes mais antigas do yt-dlp)
+            # Baixa o video completo e depois corta com moviepy
+            full_video_path = TEMP_DIR / f"yt_{video_id}_full.mp4"
+
             result = subprocess.run(
                 [
                     "yt-dlp",
                     "-f", "best[ext=mp4]/best",
-                    "-o", str(output_path),
+                    "-o", str(full_video_path),
                     "--no-warnings",
                     "--no-playlist",
                     f"https://www.youtube.com/watch?v={video_id}"
@@ -195,6 +198,32 @@ def download_youtube_segment(
 
             if result.returncode != 0:
                 raise ConversionError(f"Erro no download: {result.stderr}")
+
+            # Verificar se arquivo existe (yt-dlp pode mudar extensao)
+            if not full_video_path.exists():
+                possible_files = list(TEMP_DIR.glob(f"yt_{video_id}_full.*"))
+                if possible_files:
+                    full_video_path = possible_files[0]
+                else:
+                    raise ConversionError("Arquivo de video nao foi criado")
+
+            # Cortar o trecho desejado usando moviepy
+            try:
+                from moviepy import VideoFileClip
+                with VideoFileClip(str(full_video_path)) as clip:
+                    # Ajustar end se for maior que a duracao do video
+                    actual_end = min(end, clip.duration)
+                    trimmed = clip.subclipped(start, actual_end)
+                    trimmed.write_videofile(
+                        str(output_path),
+                        codec="libx264",
+                        audio_codec="aac",
+                        logger=None  # Suprimir output
+                    )
+            finally:
+                # Limpar video completo
+                if full_video_path.exists():
+                    full_video_path.unlink()
 
         if not output_path.exists():
             # yt-dlp pode adicionar extensao diferente

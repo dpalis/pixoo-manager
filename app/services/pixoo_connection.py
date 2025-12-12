@@ -37,7 +37,7 @@ class PixooServiceListener(ServiceListener):
 
 class PixooConnection:
     """
-    Singleton para gerenciar conexão com o Pixoo 64.
+    Singleton thread-safe para gerenciar conexão com o Pixoo 64.
 
     Uso:
         conn = PixooConnection()
@@ -48,11 +48,12 @@ class PixooConnection:
     """
 
     _instance: Optional["PixooConnection"] = None
-    _lock = threading.Lock()
+    _instance_lock = threading.Lock()
 
     def __new__(cls) -> "PixooConnection":
         if cls._instance is None:
-            with cls._lock:
+            with cls._instance_lock:
+                # Double-check locking
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
@@ -64,16 +65,20 @@ class PixooConnection:
         self._initialized = True
         self._ip: Optional[str] = None
         self._connected: bool = False
+        # Lock para proteger estado de conexão
+        self._state_lock = threading.RLock()
 
     @property
     def is_connected(self) -> bool:
-        """Retorna True se conectado ao Pixoo."""
-        return self._connected
+        """Retorna True se conectado ao Pixoo (thread-safe)."""
+        with self._state_lock:
+            return self._connected
 
     @property
     def current_ip(self) -> Optional[str]:
-        """Retorna o IP do Pixoo conectado, ou None."""
-        return self._ip if self._connected else None
+        """Retorna o IP do Pixoo conectado, ou None (thread-safe)."""
+        with self._state_lock:
+            return self._ip if self._connected else None
 
     def discover(self, timeout: float = 3.0) -> List[str]:
         """
@@ -175,7 +180,7 @@ class PixooConnection:
 
     def connect(self, ip: str) -> bool:
         """
-        Conecta ao Pixoo no IP especificado.
+        Conecta ao Pixoo no IP especificado (thread-safe).
 
         Args:
             ip: Endereço IP do Pixoo
@@ -197,8 +202,9 @@ class PixooConnection:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("error_code") == 0:
-                    self._ip = ip
-                    self._connected = True
+                    with self._state_lock:
+                        self._ip = ip
+                        self._connected = True
                     return True
 
             raise PixooConnectionError(f"Pixoo em {ip} não respondeu corretamente")
@@ -207,17 +213,20 @@ class PixooConnection:
             raise PixooConnectionError(f"Timeout ao conectar com {ip}")
         except requests.exceptions.ConnectionError:
             raise PixooConnectionError(f"Não foi possível conectar com {ip}")
+        except PixooConnectionError:
+            raise
         except Exception as e:
             raise PixooConnectionError(f"Erro ao conectar: {e}")
 
     def disconnect(self) -> None:
-        """Desconecta do Pixoo."""
-        self._ip = None
-        self._connected = False
+        """Desconecta do Pixoo (thread-safe)."""
+        with self._state_lock:
+            self._ip = None
+            self._connected = False
 
     def send_command(self, command: dict) -> dict:
         """
-        Envia comando para o Pixoo conectado.
+        Envia comando para o Pixoo conectado (thread-safe).
 
         Args:
             command: Dicionário com o comando (ex: {"Command": "Channel/GetIndex"})
@@ -228,12 +237,14 @@ class PixooConnection:
         Raises:
             PixooConnectionError: Se não estiver conectado ou comando falhar
         """
-        if not self._connected or not self._ip:
-            raise PixooConnectionError("Não conectado ao Pixoo")
+        with self._state_lock:
+            if not self._connected or not self._ip:
+                raise PixooConnectionError("Não conectado ao Pixoo")
+            ip = self._ip  # Cópia local para uso fora do lock
 
         try:
             response = requests.post(
-                f"http://{self._ip}:80/post",
+                f"http://{ip}:80/post",
                 json=command,
                 timeout=10
             )
@@ -247,22 +258,26 @@ class PixooConnection:
             raise PixooConnectionError("Timeout ao enviar comando")
         except requests.exceptions.ConnectionError:
             # Conexão perdida
-            self._connected = False
+            with self._state_lock:
+                self._connected = False
             raise PixooConnectionError("Conexão perdida com o Pixoo")
+        except PixooConnectionError:
+            raise
         except Exception as e:
             raise PixooConnectionError(f"Erro ao enviar comando: {e}")
 
     def get_status(self) -> dict:
         """
-        Retorna status atual da conexão.
+        Retorna status atual da conexão (thread-safe).
 
         Returns:
             Dict com connected (bool) e ip (str ou None)
         """
-        return {
-            "connected": self._connected,
-            "ip": self._ip if self._connected else None
-        }
+        with self._state_lock:
+            return {
+                "connected": self._connected,
+                "ip": self._ip if self._connected else None
+            }
 
 
 # Instância global (singleton)

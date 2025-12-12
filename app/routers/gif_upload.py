@@ -32,12 +32,9 @@ from app.services.exceptions import (
     UploadError,
 )
 from app.middleware import upload_limiter, check_rate_limit
+from app.services.upload_manager import gif_uploads
 
 router = APIRouter(prefix="/api/gif", tags=["gif"])
-
-# Armazenamento temporário de uploads processados
-# Em produção, usar cache como Redis
-_uploads: Dict[str, dict] = {}
 
 
 class UploadResponse(BaseModel):
@@ -115,12 +112,12 @@ async def upload_gif_file(file: UploadFile = File(...)):
         # Gerar ID único
         upload_id = str(uuid.uuid4())[:8]
 
-        # Armazenar info do upload
-        _uploads[upload_id] = {
+        # Armazenar info do upload (com TTL automático)
+        gif_uploads.set(upload_id, {
             "path": temp_path,
             "metadata": metadata,
             "converted": needs_conversion
-        }
+        })
 
         return UploadResponse(
             id=upload_id,
@@ -147,14 +144,14 @@ async def get_gif_preview(upload_id: str):
 
     O GIF é escalado 4x com nearest-neighbor para melhor visualização.
     """
-    if upload_id not in _uploads:
+    upload_info = gif_uploads.get(upload_id)
+    if upload_info is None:
         raise HTTPException(status_code=404, detail="Upload não encontrado")
 
-    upload_info = _uploads[upload_id]
     path = upload_info["path"]
 
     if not path.exists():
-        del _uploads[upload_id]
+        gif_uploads.delete(upload_id)
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     return FileResponse(
@@ -171,7 +168,8 @@ async def send_gif_to_pixoo(request: SendRequest):
 
     Requer conexão prévia com o Pixoo via /api/connect.
     """
-    if request.id not in _uploads:
+    upload_info = gif_uploads.get(request.id)
+    if upload_info is None:
         raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     # Verificar conexão
@@ -182,11 +180,10 @@ async def send_gif_to_pixoo(request: SendRequest):
             detail="Não conectado ao Pixoo. Conecte primeiro via /api/connect"
         )
 
-    upload_info = _uploads[request.id]
     path = upload_info["path"]
 
     if not path.exists():
-        del _uploads[request.id]
+        gif_uploads.delete(request.id)
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     try:
@@ -209,13 +206,7 @@ async def send_gif_to_pixoo(request: SendRequest):
 @router.delete("/{upload_id}")
 async def delete_upload(upload_id: str):
     """Remove um upload da memória e limpa arquivos temporários."""
-    if upload_id not in _uploads:
+    if not gif_uploads.delete(upload_id):
         raise HTTPException(status_code=404, detail="Upload não encontrado")
-
-    upload_info = _uploads[upload_id]
-    path = upload_info["path"]
-
-    cleanup_files([path])
-    del _uploads[upload_id]
 
     return {"success": True}

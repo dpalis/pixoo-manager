@@ -10,8 +10,6 @@ Endpoints:
 
 import asyncio
 import uuid
-from pathlib import Path
-from typing import Dict
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -39,11 +37,9 @@ from app.services.exceptions import (
     VideoTooLongError,
 )
 from app.middleware import convert_limiter, upload_limiter, check_rate_limit
+from app.services.upload_manager import media_uploads
 
 router = APIRouter(prefix="/api/media", tags=["media"])
-
-# Armazenamento temporario de uploads
-_uploads: Dict[str, dict] = {}
 
 
 class MediaUploadResponse(BaseModel):
@@ -127,12 +123,12 @@ async def upload_media(file: UploadFile = File(...)):
             output_path, metadata = convert_image(temp_path)
             cleanup_files([temp_path])
 
-            _uploads[upload_id] = {
+            media_uploads.set(upload_id, {
                 "type": "image",
                 "path": output_path,
                 "metadata": metadata,
                 "converted": True
-            }
+            })
 
             return MediaUploadResponse(
                 id=upload_id,
@@ -146,12 +142,12 @@ async def upload_media(file: UploadFile = File(...)):
             # Obter info do video
             video_info = get_video_info(temp_path)
 
-            _uploads[upload_id] = {
+            media_uploads.set(upload_id, {
                 "type": "video",
                 "path": temp_path,
                 "metadata": video_info,
                 "converted": False
-            }
+            })
 
             return MediaUploadResponse(
                 id=upload_id,
@@ -173,10 +169,10 @@ async def upload_media(file: UploadFile = File(...)):
 @router.get("/info/{upload_id}")
 async def get_media_info(upload_id: str):
     """Retorna informacoes do arquivo enviado."""
-    if upload_id not in _uploads:
+    upload = media_uploads.get(upload_id)
+    if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 
-    upload = _uploads[upload_id]
     metadata = upload["metadata"]
 
     if upload["type"] == "video":
@@ -200,10 +196,10 @@ async def get_media_info(upload_id: str):
 @router.get("/preview/{upload_id}")
 async def get_media_preview(upload_id: str):
     """Retorna preview do arquivo convertido."""
-    if upload_id not in _uploads:
+    upload = media_uploads.get(upload_id)
+    if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 
-    upload = _uploads[upload_id]
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
@@ -226,17 +222,16 @@ async def convert_video(request: ConvertRequest):
     Rate limited: 5 requisições por minuto (CPU intensivo).
     """
     check_rate_limit(convert_limiter)
-    if request.id not in _uploads:
+    upload = media_uploads.get(request.id)
+    if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
-
-    upload = _uploads[request.id]
 
     if upload["type"] != "video":
         raise HTTPException(status_code=400, detail="Arquivo nao e um video")
 
     path = upload["path"]
     if not path.exists():
-        del _uploads[request.id]
+        media_uploads.delete(request.id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     # Validar duracao
@@ -295,9 +290,12 @@ async def convert_video(request: ConvertRequest):
             yield f"data: {data}\n\n"
         else:
             # Atualizar upload com resultado
-            _uploads[request.id]["converted_path"] = result["path"]
-            _uploads[request.id]["converted"] = True
-            _uploads[request.id]["frames"] = result["frames"]
+            media_uploads.update(
+                request.id,
+                converted_path=result["path"],
+                converted=True,
+                frames=result["frames"]
+            )
 
             data = json.dumps({
                 "done": True,
@@ -322,17 +320,16 @@ async def convert_video_sync(request: ConvertRequest):
     Rate limited: 5 requisições por minuto (CPU intensivo).
     """
     check_rate_limit(convert_limiter)
-    if request.id not in _uploads:
+    upload = media_uploads.get(request.id)
+    if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
-
-    upload = _uploads[request.id]
 
     if upload["type"] != "video":
         raise HTTPException(status_code=400, detail="Arquivo nao e um video")
 
     path = upload["path"]
     if not path.exists():
-        del _uploads[request.id]
+        media_uploads.delete(request.id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     try:
@@ -342,9 +339,12 @@ async def convert_video_sync(request: ConvertRequest):
             request.end
         )
 
-        _uploads[request.id]["converted_path"] = output_path
-        _uploads[request.id]["converted"] = True
-        _uploads[request.id]["frames"] = frames
+        media_uploads.update(
+            request.id,
+            converted_path=output_path,
+            converted=True,
+            frames=frames
+        )
 
         return ConvertResponse(
             id=request.id,
@@ -363,10 +363,9 @@ async def convert_video_sync(request: ConvertRequest):
 @router.post("/send", response_model=SendResponse)
 async def send_to_pixoo(request: SendRequest):
     """Envia arquivo convertido para o Pixoo."""
-    if request.id not in _uploads:
+    upload = media_uploads.get(request.id)
+    if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
-
-    upload = _uploads[request.id]
 
     if not upload.get("converted"):
         raise HTTPException(status_code=400, detail="Arquivo nao foi convertido")
@@ -400,14 +399,7 @@ async def send_to_pixoo(request: SendRequest):
 @router.delete("/{upload_id}")
 async def delete_upload(upload_id: str):
     """Remove upload e limpa arquivos temporarios."""
-    if upload_id not in _uploads:
+    if not media_uploads.delete(upload_id):
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
-
-    upload = _uploads[upload_id]
-    paths_to_clean = [upload.get("path"), upload.get("converted_path")]
-    paths_to_clean = [p for p in paths_to_clean if p]
-
-    cleanup_files(paths_to_clean)
-    del _uploads[upload_id]
 
     return {"success": True}
