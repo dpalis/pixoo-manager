@@ -34,8 +34,10 @@ from app.services.exceptions import (
     ConversionError,
     PixooConnectionError,
     UploadError,
+    ValidationError,
     VideoTooLongError,
 )
+from app.services.validators import validate_video_duration
 from app.middleware import convert_limiter, upload_limiter, check_rate_limit
 from app.services.upload_manager import media_uploads
 
@@ -235,12 +237,10 @@ async def convert_video(request: ConvertRequest):
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     # Validar duracao
-    duration = request.end - request.start
-    if duration > MAX_VIDEO_DURATION:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Duracao maxima e {MAX_VIDEO_DURATION}s"
-        )
+    try:
+        validate_video_duration(request.start, request.end, MAX_VIDEO_DURATION)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     async def generate_progress():
         """Gera eventos SSE durante conversao."""

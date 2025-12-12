@@ -196,3 +196,29 @@ def validate_content_type(content_type: Optional[str], allowed_types: list[str])
     if not content_type or content_type not in allowed_types:
         tipos = ", ".join(t.split("/")[1].upper() for t in allowed_types)
         raise ValidationError(f"Tipo de arquivo inválido. Tipos aceitos: {tipos}")
+
+
+def validate_video_duration(start: float, end: float, max_duration: float) -> float:
+    """
+    Valida duração de um segmento de vídeo.
+
+    Args:
+        start: Tempo inicial em segundos
+        end: Tempo final em segundos
+        max_duration: Duração máxima permitida
+
+    Returns:
+        Duração do segmento
+
+    Raises:
+        ValidationError: Se duração for inválida
+    """
+    duration = end - start
+
+    if duration <= 0:
+        raise ValidationError("Tempo final deve ser maior que o inicial")
+
+    if duration > max_duration:
+        raise ValidationError(f"Duração máxima é {max_duration}s")
+
+    return duration

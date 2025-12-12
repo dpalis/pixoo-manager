@@ -25,8 +25,10 @@ from app.services.exceptions import (
     ConversionError,
     PixooConnectionError,
     UploadError,
+    ValidationError,
     VideoTooLongError,
 )
+from app.services.validators import validate_video_duration
 from app.middleware import youtube_limiter, check_rate_limit
 from app.services.upload_manager import youtube_downloads
 
@@ -108,19 +110,12 @@ async def download_video(request: DownloadRequest):
     Rate limited: 5 requisições por minuto (download + conversão).
     """
     check_rate_limit(youtube_limiter)
-    duration = request.end - request.start
 
-    if duration > MAX_VIDEO_DURATION:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Duracao maxima e {MAX_VIDEO_DURATION}s"
-        )
-
-    if duration <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Tempo final deve ser maior que o inicial"
-        )
+    # Validar duracao
+    try:
+        validate_video_duration(request.start, request.end, MAX_VIDEO_DURATION)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     try:
         gif_path, frames = download_and_convert_youtube(
