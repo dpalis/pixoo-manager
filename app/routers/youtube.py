@@ -5,12 +5,14 @@ Endpoints:
 - POST /api/youtube/info - Obtem info do video
 - POST /api/youtube/download - Baixa e converte trecho
 - POST /api/youtube/send - Envia para Pixoo
+- GET /api/youtube/thumbnail/{video_id} - Proxy para thumbnail
 """
 
 import uuid
 
+import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app.config import MAX_VIDEO_DURATION
@@ -82,15 +84,17 @@ async def get_video_info(request: InfoRequest):
     """
     Obtem informacoes do video do YouTube sem baixar.
 
-    Retorna titulo, duracao, thumbnail e canal.
+    Retorna titulo, duracao, thumbnail (proxy local) e canal.
     """
     try:
         info = get_youtube_info(request.url)
+        # Usar proxy local para evitar CSP/CORS
+        thumbnail_url = f"/api/youtube/thumbnail/{info.id}"
         return InfoResponse(
             id=info.id,
             title=info.title,
             duration=info.duration,
-            thumbnail=info.thumbnail,
+            thumbnail=thumbnail_url,
             channel=info.channel,
             max_duration=MAX_VIDEO_DURATION
         )
@@ -206,3 +210,41 @@ async def delete_download(download_id: str):
         raise HTTPException(status_code=404, detail="Download nao encontrado")
 
     return {"success": True}
+
+
+@router.get("/thumbnail/{video_id}")
+async def get_thumbnail(video_id: str):
+    """
+    Proxy para thumbnail do YouTube.
+
+    Evita problemas de CSP/CORS ao servir a imagem localmente.
+    Tenta diferentes resoluções em ordem de preferência.
+    """
+    # Validar video_id (11 caracteres alfanuméricos + _ e -)
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]{11}$', video_id):
+        raise HTTPException(status_code=400, detail="ID de video invalido")
+
+    # URLs de thumbnail em ordem de preferência (maior para menor qualidade)
+    thumbnail_urls = [
+        f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/sddefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",
+        f"https://i.ytimg.com/vi/{video_id}/default.jpg",
+    ]
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for url in thumbnail_urls:
+            try:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    return Response(
+                        content=response.content,
+                        media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=3600"}
+                    )
+            except httpx.RequestError:
+                continue
+
+    raise HTTPException(status_code=404, detail="Thumbnail nao encontrada")

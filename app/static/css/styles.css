@@ -456,6 +456,47 @@ button.secondary:hover {
 }
 
 /* ============================================
+   Pixoo Preview 64x64
+   ============================================ */
+.pixoo-preview-section {
+    text-align: center;
+    padding: 1rem;
+    margin-top: 1.5rem;
+    background: var(--bg-dark);
+    border-radius: 0.5rem;
+    border: 1px solid var(--pixoo-green);
+}
+
+.pixoo-preview-section h4 {
+    margin: 0 0 0.75rem;
+    color: var(--pixoo-green);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.pixoo-preview-box {
+    display: inline-block;
+    padding: 8px;
+    background: #000;
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.pixoo-preview-img {
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+}
+
+/* Preview box inside converted-preview */
+.converted-preview .pixoo-preview-box {
+    margin-bottom: 0.5rem;
+}
+
+/* ============================================
    YouTube Tab
    ============================================ */
 .url-input-section {
