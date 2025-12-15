@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -119,23 +120,15 @@ app.include_router(youtube_router.router)
 # Rotas de páginas
 
 @app.get("/")
-async def home(request: Request):
-    """Página inicial - redireciona para upload de GIF."""
-    return templates.TemplateResponse("base.html", {
-        "request": request,
-        "active_tab": "gif",
-        "max_file_size": MAX_FILE_SIZE,
-    })
+async def home():
+    """Página inicial - redireciona para Mídia."""
+    return RedirectResponse(url="/media", status_code=302)
 
 
 @app.get("/gif")
-async def gif_page(request: Request):
-    """Página de upload de GIF."""
-    return templates.TemplateResponse("base.html", {
-        "request": request,
-        "active_tab": "gif",
-        "max_file_size": MAX_FILE_SIZE,
-    })
+async def gif_page():
+    """Redireciona /gif para /media (tabs unificadas)."""
+    return RedirectResponse(url="/media", status_code=302)
 
 
 @app.get("/media")

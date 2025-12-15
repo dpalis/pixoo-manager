@@ -193,7 +193,8 @@ async def get_preview_scaled(download_id: str, scale: int = 16):
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     # Limitar scale para evitar imagens muito grandes
-    scale = min(max(scale, 1), 16)
+    from app.config import PREVIEW_SCALE
+    scale = min(max(scale, 1), PREVIEW_SCALE)
 
     try:
         with Image.open(path) as img:
@@ -282,6 +283,32 @@ async def send_to_pixoo(request: SendRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except UploadError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download-gif/{download_id}")
+async def download_youtube_gif(download_id: str):
+    """
+    Download do GIF processado (64x64).
+
+    Permite ao usuário salvar o GIF convertido em seu computador.
+    """
+    download = youtube_downloads.get(download_id)
+    if download is None:
+        raise HTTPException(status_code=404, detail="Download nao encontrado")
+
+    path = download["path"]
+
+    if not path.exists():
+        youtube_downloads.delete(download_id)
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+
+    filename = f"youtube_{download_id}.gif"
+    return FileResponse(
+        path,
+        media_type="image/gif",
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.delete("/{download_id}")

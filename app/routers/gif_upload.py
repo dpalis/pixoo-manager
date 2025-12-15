@@ -193,7 +193,8 @@ async def get_gif_preview_scaled(upload_id: str, scale: int = 16):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     # Limitar scale para evitar imagens muito grandes
-    scale = min(max(scale, 1), 16)
+    from app.config import PREVIEW_SCALE
+    scale = min(max(scale, 1), PREVIEW_SCALE)
 
     from PIL import Image
     import io
@@ -295,6 +296,32 @@ async def send_gif_to_pixoo(request: SendRequest):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao enviar: {e}")
+
+
+@router.get("/download/{upload_id}")
+async def download_gif(upload_id: str):
+    """
+    Download do GIF processado (64x64).
+
+    Permite ao usuário salvar o GIF convertido em seu computador.
+    """
+    upload_info = gif_uploads.get(upload_id)
+    if upload_info is None:
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
+
+    path = upload_info["path"]
+
+    if not path.exists():
+        gif_uploads.delete(upload_id)
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    filename = f"pixoo_{upload_id}.gif"
+    return FileResponse(
+        path,
+        media_type="image/gif",
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.delete("/{upload_id}")
