@@ -1,0 +1,1 @@
+# Pixoo Manager Tests
