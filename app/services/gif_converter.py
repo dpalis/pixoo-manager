@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 
 import imageio.v3 as iio
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 
 from app.config import MAX_CONVERT_FRAMES, PIXOO_SIZE
 from app.services.exceptions import ConversionError, TooManyFramesError
@@ -376,6 +376,8 @@ def convert_image(
 
     try:
         with Image.open(input_path) as img:
+            # Aplicar rotação EXIF (fotos de celular podem ter orientação nos metadados)
+            img = ImageOps.exif_transpose(img)
             converted = convert_image_pil(img, options)
     except Exception as e:
         raise ConversionError(f"Falha ao carregar imagem: {e}")

@@ -19,6 +19,7 @@ from app.config import ALLOWED_GIF_TYPES, ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE
 from app.services.file_utils import stream_upload_to_temp, cleanup_files
 from app.services.gif_converter import (
     convert_gif,
+    convert_image,
     is_pixoo_ready,
     ConvertOptions,
     GifMetadata,
@@ -88,9 +89,23 @@ async def upload_gif_file(file: UploadFile = File(...)):
         needs_conversion = not is_pixoo_ready(temp_path)
 
         if needs_conversion:
-            # Converter para 64x64
+            # Determinar se é GIF animado ou imagem estática
+            from PIL import Image
+            with Image.open(temp_path) as img:
+                is_animated_gif = (
+                    temp_path.suffix.lower() == '.gif' and
+                    hasattr(img, 'n_frames') and
+                    img.n_frames > 1
+                )
+
+            # Converter para 64x64 usando função apropriada
             options = ConvertOptions(led_optimize=True)
-            output_path, metadata = convert_gif(temp_path, options)
+            if is_animated_gif:
+                output_path, metadata = convert_gif(temp_path, options)
+            else:
+                # Imagens estáticas (JPEG, PNG, WebP, GIF estático)
+                # convert_image aplica rotação EXIF automaticamente
+                output_path, metadata = convert_image(temp_path, options)
 
             # Limpar arquivo original
             cleanup_files([temp_path])
@@ -139,9 +154,7 @@ async def upload_gif_file(file: UploadFile = File(...)):
 @router.get("/preview/{upload_id}")
 async def get_gif_preview(upload_id: str):
     """
-    Retorna o GIF processado para preview.
-
-    O GIF é escalado 4x com nearest-neighbor para melhor visualização.
+    Retorna o GIF processado para preview (versão original 64x64).
     """
     upload_info = gif_uploads.get(upload_id)
     if upload_info is None:
@@ -158,6 +171,88 @@ async def get_gif_preview(upload_id: str):
         media_type="image/gif",
         filename=f"pixoo_preview_{upload_id}.gif"
     )
+
+
+@router.get("/preview/{upload_id}/scaled")
+async def get_gif_preview_scaled(upload_id: str, scale: int = 16):
+    """
+    Retorna o GIF escalado para melhor visualização.
+
+    Cada pixel do original (64x64) é ampliado para scale x scale pixels.
+    Por padrão scale=16, resultando em 1024x1024 pixels.
+    Usa nearest-neighbor para manter pixels nítidos.
+    """
+    upload_info = gif_uploads.get(upload_id)
+    if upload_info is None:
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
+
+    path = upload_info["path"]
+
+    if not path.exists():
+        gif_uploads.delete(upload_id)
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    # Limitar scale para evitar imagens muito grandes
+    scale = min(max(scale, 1), 16)
+
+    from PIL import Image
+    import io
+
+    try:
+        with Image.open(path) as img:
+            # Calcular novo tamanho
+            new_size = (img.size[0] * scale, img.size[1] * scale)
+
+            # Se for GIF animado, escalar cada frame
+            if hasattr(img, 'n_frames') and img.n_frames > 1:
+                frames = []
+                durations = []
+
+                for frame_idx in range(img.n_frames):
+                    img.seek(frame_idx)
+                    frame = img.convert('RGBA')
+                    # Usar NEAREST para manter pixels nítidos
+                    scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
+                    frames.append(scaled_frame)
+                    durations.append(img.info.get('duration', 100))
+
+                # Criar GIF em memória
+                output = io.BytesIO()
+                frames[0].save(
+                    output,
+                    format='GIF',
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=img.info.get('loop', 0),
+                    disposal=2
+                )
+                output.seek(0)
+
+                from fastapi.responses import StreamingResponse
+                return StreamingResponse(
+                    output,
+                    media_type="image/gif",
+                    headers={"Content-Disposition": f"inline; filename=pixoo_scaled_{upload_id}.gif"}
+                )
+            else:
+                # Imagem estática
+                frame = img.convert('RGBA')
+                scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
+
+                output = io.BytesIO()
+                scaled_frame.save(output, format='GIF')
+                output.seek(0)
+
+                from fastapi.responses import StreamingResponse
+                return StreamingResponse(
+                    output,
+                    media_type="image/gif",
+                    headers={"Content-Disposition": f"inline; filename=pixoo_scaled_{upload_id}.gif"}
+                )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao escalar imagem: {e}")
 
 
 @router.post("/send", response_model=SendResponse)

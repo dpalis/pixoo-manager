@@ -196,6 +196,14 @@ function gifUpload() {
             return this.uploadId !== null;
         },
 
+        getDisplayPreviewUrl() {
+            // Retorna URL escalada para melhor visualização
+            if (this.uploadId && this.previewUrl) {
+                return `${this.previewUrl}/scaled`;
+            }
+            return this.previewUrl;
+        },
+
         handleDrop(event) {
             this.dragOver = false;
             const files = event.dataTransfer.files;

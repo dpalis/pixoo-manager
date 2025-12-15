@@ -242,6 +242,17 @@ body {
     border: 2px solid var(--border-color);
 }
 
+/* Preview escalado - mostra GIF ampliado para visualização */
+.gif-preview-scaled {
+    width: 256px;
+    height: 256px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-radius: 0.5rem;
+    border: 2px solid var(--border-color);
+    background: #000;
+}
+
 .file-info {
     text-align: center;
 }

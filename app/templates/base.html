@@ -105,7 +105,7 @@
 
                     <template x-if="previewUrl">
                         <div class="preview-container">
-                            <img :src="previewUrl" alt="Preview" class="gif-preview">
+                            <img :src="uploadId ? previewUrl + '/scaled' : previewUrl" alt="Preview" class="gif-preview-scaled">
                             <div class="file-info">
                                 <p x-text="fileName"></p>
                                 <p x-text="fileInfo"></p>
@@ -113,16 +113,6 @@
                         </div>
                     </template>
                 </div>
-
-                <!-- Preview 64x64 do resultado final -->
-                <template x-if="previewUrl && uploadId">
-                    <div class="pixoo-preview-section">
-                        <h4>Preview no Pixoo (64x64)</h4>
-                        <div class="pixoo-preview-box">
-                            <img :src="previewUrl" alt="Preview 64x64" class="pixoo-preview-img">
-                        </div>
-                    </div>
-                </template>
 
                 <div class="actions" x-show="previewUrl">
                     <button @click="clearFile()" class="secondary">Limpar</button>
@@ -169,7 +159,7 @@
                 <!-- Preview de imagem -->
                 <template x-if="mediaType === 'image' && previewUrl">
                     <div class="preview-container">
-                        <img :src="previewUrl" alt="Preview" class="gif-preview">
+                        <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
                         <div class="file-info">
                             <p x-text="fileName"></p>
                             <p x-text="fileInfo"></p>
@@ -235,26 +225,16 @@
                             <p class="progress-text" x-text="convertPhase"></p>
                         </div>
 
-                        <!-- Preview do GIF convertido com preview 64x64 -->
+                        <!-- Preview do GIF convertido -->
                         <template x-if="convertedPreviewUrl">
-                            <div class="converted-preview">
-                                <h4>Preview no Pixoo (64x64)</h4>
-                                <div class="pixoo-preview-box">
-                                    <img :src="convertedPreviewUrl" alt="Preview 64x64" class="pixoo-preview-img">
+                            <div class="preview-container">
+                                <img :src="convertedPreviewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
+                                <div class="file-info">
+                                    <p x-text="fileName"></p>
+                                    <p x-text="`${convertedFrames} frames`"></p>
                                 </div>
-                                <p x-text="`${convertedFrames} frames`"></p>
                             </div>
                         </template>
-                    </div>
-                </template>
-
-                <!-- Preview 64x64 para imagens -->
-                <template x-if="mediaType === 'image' && previewUrl">
-                    <div class="pixoo-preview-section">
-                        <h4>Preview no Pixoo (64x64)</h4>
-                        <div class="pixoo-preview-box">
-                            <img :src="previewUrl" alt="Preview 64x64" class="pixoo-preview-img">
-                        </div>
                     </div>
                 </template>
 
@@ -366,14 +346,14 @@
                     <p class="progress-text" x-text="downloadPhase"></p>
                 </div>
 
-                <!-- Preview do GIF 64x64 -->
+                <!-- Preview do GIF convertido -->
                 <template x-if="previewUrl">
-                    <div class="converted-preview">
-                        <h4>Preview no Pixoo (64x64)</h4>
-                        <div class="pixoo-preview-box">
-                            <img :src="previewUrl" alt="Preview 64x64" class="pixoo-preview-img">
+                    <div class="preview-container">
+                        <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
+                        <div class="file-info">
+                            <p x-text="videoInfo ? videoInfo.title : ''"></p>
+                            <p x-text="`${convertedFrames} frames`"></p>
                         </div>
-                        <p x-text="`${convertedFrames} frames`"></p>
                     </div>
                 </template>
 
