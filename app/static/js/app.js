@@ -324,7 +324,7 @@ function mediaUpload() {
         dragOver: false,
         file: null,
         uploadId: null,
-        mediaType: null, // 'image' ou 'video'
+        mediaType: null, // 'image', 'video' ou 'gif'
         fileName: '',
         fileInfo: '',
         previewUrl: null,
@@ -344,6 +344,64 @@ function mediaUpload() {
         message: '',
         messageType: '',
 
+        async init() {
+            await this.restoreState();
+            // Auto-save state when key properties change
+            this.$watch('uploadId', () => this.saveState());
+            this.$watch('previewUrl', () => this.saveState());
+            this.$watch('converted', () => this.saveState());
+            this.$watch('convertedPreviewUrl', () => this.saveState());
+        },
+
+        saveState() {
+            const state = {
+                uploadId: this.uploadId,
+                mediaType: this.mediaType,
+                fileName: this.fileName,
+                fileInfo: this.fileInfo,
+                previewUrl: this.previewUrl,
+                videoDuration: this.videoDuration,
+                startTime: this.startTime,
+                endTime: this.endTime,
+                startTimeStr: this.startTimeStr,
+                endTimeStr: this.endTimeStr,
+                converted: this.converted,
+                convertedPreviewUrl: this.convertedPreviewUrl,
+                convertedFrames: this.convertedFrames
+                // Não salvar: file (File object), videoUrl (blob URL), cropper
+            };
+            localStorage.setItem('mediaUpload', JSON.stringify(state));
+        },
+
+        async restoreState() {
+            const saved = localStorage.getItem('mediaUpload');
+            if (!saved) return;
+
+            try {
+                const state = JSON.parse(saved);
+
+                // Validar com servidor se há uploadId
+                if (state.uploadId) {
+                    const endpoint = state.mediaType === 'gif'
+                        ? `/api/gif/preview/${state.uploadId}`
+                        : `/api/media/preview/${state.uploadId}`;
+
+                    const response = await fetch(endpoint, { method: 'HEAD' });
+                    if (!response.ok) {
+                        // Upload expirou no servidor
+                        console.log('Upload expirado, limpando estado local');
+                        localStorage.removeItem('mediaUpload');
+                        return;
+                    }
+                }
+
+                Object.assign(this, state);
+            } catch (e) {
+                console.error('Erro ao restaurar estado:', e);
+                localStorage.removeItem('mediaUpload');
+            }
+        },
+
         get hasFile() {
             return this.uploadId !== null;
         },
@@ -357,7 +415,8 @@ function mediaUpload() {
         },
 
         get canSend() {
-            return (this.mediaType === 'image' && this.uploadId) ||
+            return (this.mediaType === 'gif' && this.uploadId) ||
+                   (this.mediaType === 'image' && this.uploadId) ||
                    (this.mediaType === 'video' && this.converted);
         },
 
@@ -365,6 +424,21 @@ function mediaUpload() {
             this.dragOver = false;
             const files = event.dataTransfer.files;
             if (files.length > 0) {
+                // Se ja tem arquivo carregado, limpar antes de processar novo
+                if (this.hasFile) {
+                    if (this.videoUrl) {
+                        URL.revokeObjectURL(this.videoUrl);
+                    }
+                    this.file = null;
+                    this.uploadId = null;
+                    this.mediaType = null;
+                    this.previewUrl = null;
+                    this.videoUrl = null;
+                    this.converted = false;
+                    this.convertedPreviewUrl = null;
+                    this.convertedFrames = 0;
+                    this.clearMessage();
+                }
                 this.processFile(files[0]);
             }
         },
@@ -377,25 +451,31 @@ function mediaUpload() {
         },
 
         async processFile(file) {
+            const gifTypes = ['image/gif'];
             const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
             const videoTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
 
-            if (!imageTypes.includes(file.type) && !videoTypes.includes(file.type)) {
-                this.showMessage('Formato nao suportado. Use PNG, JPEG, WebP, MP4, MOV ou WebM.', 'error');
+            const isGif = gifTypes.includes(file.type);
+            const isImage = imageTypes.includes(file.type);
+            const isVideo = videoTypes.includes(file.type);
+
+            if (!isGif && !isImage && !isVideo) {
+                this.showMessage('Formato não suportado. Use GIF, PNG, JPEG, WebP, MP4, MOV ou WebM.', 'error');
                 return;
             }
 
             this.file = file;
             this.fileName = file.name;
 
-            // Upload para o servidor
             const formData = new FormData();
             formData.append('file', file);
 
             try {
                 this.showMessage('Enviando arquivo...', 'info');
 
-                const response = await fetch('/api/media/upload', {
+                // GIFs usam endpoint dedicado, outros usam /api/media
+                const endpoint = isGif ? '/api/gif/upload' : '/api/media/upload';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData
                 });
@@ -408,14 +488,21 @@ function mediaUpload() {
 
                 const data = await response.json();
                 this.uploadId = data.id;
-                this.mediaType = data.type;
 
-                if (data.type === 'image') {
+                if (isGif) {
+                    this.mediaType = 'gif';
+                    this.previewUrl = data.preview_url;
+                    this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
+                    this.converted = true;
+                    this.clearMessage();
+                } else if (data.type === 'image') {
+                    this.mediaType = 'image';
                     this.previewUrl = data.preview_url;
                     this.fileInfo = `${data.width}x${data.height}`;
-                    this.converted = true; // Imagens ja vem convertidas
+                    this.converted = true;
                     this.clearMessage();
                 } else {
+                    this.mediaType = 'video';
                     this.videoUrl = URL.createObjectURL(file);
                     this.videoDuration = data.duration;
                     this.endTime = Math.min(10, data.duration);
@@ -448,7 +535,7 @@ function mediaUpload() {
             if (this.startTime >= this.endTime) {
                 this.startTime = Math.max(0, this.endTime - 0.1);
             }
-            this.startTimeStr = this.formatTime(this.startTime);
+            this.startTimeStr = utils.formatTime(this.startTime);
         },
 
         updateEndTime() {
@@ -456,7 +543,7 @@ function mediaUpload() {
             if (this.endTime <= this.startTime) {
                 this.endTime = Math.min(this.videoDuration, this.startTime + 0.1);
             }
-            this.endTimeStr = this.formatTime(this.endTime);
+            this.endTimeStr = utils.formatTime(this.endTime);
         },
 
         parseStartTime() {
@@ -521,7 +608,9 @@ function mediaUpload() {
             try {
                 this.showMessage('Enviando para Pixoo...', 'info');
 
-                const response = await fetch('/api/media/send', {
+                // GIFs usam endpoint dedicado
+                const endpoint = this.mediaType === 'gif' ? '/api/gif/send' : '/api/media/send';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: this.uploadId })
@@ -540,6 +629,22 @@ function mediaUpload() {
             } finally {
                 this.sending = false;
             }
+        },
+
+        downloadGif() {
+            if (!this.uploadId || !this.converted) return;
+
+            // GIFs usam endpoint dedicado
+            const endpoint = this.mediaType === 'gif'
+                ? `/api/gif/download/${this.uploadId}`
+                : `/api/media/download/${this.uploadId}`;
+
+            const a = document.createElement('a');
+            a.href = endpoint;
+            a.download = `pixoo_${this.uploadId}.gif`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         },
 
         clearFile() {
@@ -563,6 +668,7 @@ function mediaUpload() {
             this.convertedPreviewUrl = null;
             this.convertedFrames = 0;
             this.clearMessage();
+            localStorage.removeItem('mediaUpload');
         },
 
         showMessage(text, type) {
@@ -596,6 +702,54 @@ function youtubeDownload() {
         sending: false,
         message: '',
         messageType: '',
+
+        async init() {
+            await this.restoreState();
+            // Auto-save state when key properties change
+            this.$watch('downloadId', () => this.saveState());
+            this.$watch('previewUrl', () => this.saveState());
+            this.$watch('videoInfo', () => this.saveState());
+        },
+
+        saveState() {
+            const state = {
+                url: this.url,
+                videoInfo: this.videoInfo,
+                startTime: this.startTime,
+                endTime: this.endTime,
+                startTimeStr: this.startTimeStr,
+                endTimeStr: this.endTimeStr,
+                downloadId: this.downloadId,
+                previewUrl: this.previewUrl,
+                convertedFrames: this.convertedFrames
+            };
+            localStorage.setItem('youtubeDownload', JSON.stringify(state));
+        },
+
+        async restoreState() {
+            const saved = localStorage.getItem('youtubeDownload');
+            if (!saved) return;
+
+            try {
+                const state = JSON.parse(saved);
+
+                // Validar com servidor se há downloadId
+                if (state.downloadId) {
+                    const response = await fetch(`/api/youtube/preview/${state.downloadId}`, { method: 'HEAD' });
+                    if (!response.ok) {
+                        // Download expirou no servidor
+                        console.log('Download expirado, limpando estado local');
+                        localStorage.removeItem('youtubeDownload');
+                        return;
+                    }
+                }
+
+                Object.assign(this, state);
+            } catch (e) {
+                console.error('Erro ao restaurar estado:', e);
+                localStorage.removeItem('youtubeDownload');
+            }
+        },
 
         get segmentDuration() {
             return Math.max(0, this.endTime - this.startTime);
@@ -738,6 +892,17 @@ function youtubeDownload() {
             }
         },
 
+        downloadGif() {
+            if (!this.downloadId) return;
+
+            const a = document.createElement('a');
+            a.href = `/api/youtube/download/${this.downloadId}`;
+            a.download = `youtube_${this.downloadId}.gif`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        },
+
         clearVideo() {
             this.url = '';
             this.videoInfo = null;
@@ -750,6 +915,7 @@ function youtubeDownload() {
             this.previewUrl = null;
             this.convertedFrames = 0;
             this.clearMessage();
+            localStorage.removeItem('youtubeDownload');
         },
 
         showMessage(text, type) {

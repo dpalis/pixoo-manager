@@ -11,8 +11,8 @@ Endpoints:
 import uuid
 
 import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import MAX_VIDEO_DURATION
@@ -30,6 +30,7 @@ from app.services.exceptions import (
     ValidationError,
     VideoTooLongError,
 )
+from app.services.preview_scaler import scale_gif
 from app.services.validators import validate_video_duration
 from app.middleware import youtube_limiter, check_rate_limit
 from app.services.upload_manager import youtube_downloads
@@ -170,7 +171,10 @@ async def get_preview(download_id: str):
 
 
 @router.get("/preview/{download_id}/scaled")
-async def get_preview_scaled(download_id: str, scale: int = 16):
+async def get_preview_scaled(
+    download_id: str,
+    scale: int = Query(default=16, ge=1, le=64)
+):
     """
     Retorna o GIF escalado para melhor visualização.
 
@@ -178,10 +182,6 @@ async def get_preview_scaled(download_id: str, scale: int = 16):
     Por padrão scale=16, resultando em 1024x1024 pixels.
     Usa nearest-neighbor para manter pixels nítidos.
     """
-    from fastapi.responses import StreamingResponse
-    from PIL import Image
-    import io
-
     download = youtube_downloads.get(download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Download nao encontrado")
@@ -192,60 +192,17 @@ async def get_preview_scaled(download_id: str, scale: int = 16):
         youtube_downloads.delete(download_id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
-    # Limitar scale para evitar imagens muito grandes
-    scale = min(max(scale, 1), 16)
-
     try:
-        with Image.open(path) as img:
-            # Calcular novo tamanho
-            new_size = (img.size[0] * scale, img.size[1] * scale)
-
-            # Se for GIF animado, escalar cada frame
-            if hasattr(img, 'n_frames') and img.n_frames > 1:
-                frames = []
-                durations = []
-
-                for frame_idx in range(img.n_frames):
-                    img.seek(frame_idx)
-                    frame = img.convert('RGBA')
-                    # Usar NEAREST para manter pixels nítidos
-                    scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
-                    frames.append(scaled_frame)
-                    durations.append(img.info.get('duration', 100))
-
-                # Criar GIF em memória
-                output = io.BytesIO()
-                frames[0].save(
-                    output,
-                    format='GIF',
-                    save_all=True,
-                    append_images=frames[1:],
-                    duration=durations,
-                    loop=img.info.get('loop', 0),
-                    disposal=2
-                )
-                output.seek(0)
-
-                return StreamingResponse(
-                    output,
-                    media_type="image/gif",
-                    headers={"Content-Disposition": f"inline; filename=youtube_scaled_{download_id}.gif"}
-                )
-            else:
-                # Imagem estática
-                frame = img.convert('RGBA')
-                scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
-
-                output = io.BytesIO()
-                scaled_frame.save(output, format='GIF')
-                output.seek(0)
-
-                return StreamingResponse(
-                    output,
-                    media_type="image/gif",
-                    headers={"Content-Disposition": f"inline; filename=youtube_scaled_{download_id}.gif"}
-                )
-
+        output = scale_gif(path, scale)
+        return StreamingResponse(
+            output,
+            media_type="image/gif",
+            headers={
+                "Content-Disposition": f"inline; filename=youtube_scaled_{download_id}.gif",
+                "Cache-Control": "public, max-age=3600",
+                "ETag": f'"{download_id}:{scale}"'
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao escalar imagem: {e}")
 
@@ -282,6 +239,35 @@ async def send_to_pixoo(request: SendRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except UploadError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download/{download_id}")
+async def download_youtube_gif(download_id: str):
+    """
+    Download do GIF processado (64x64).
+
+    Permite ao usuário salvar o GIF convertido em seu computador.
+
+    Rate limited: 5 requisições por minuto.
+    """
+    check_rate_limit(youtube_limiter)
+    download = youtube_downloads.get(download_id)
+    if download is None:
+        raise HTTPException(status_code=404, detail="Download nao encontrado")
+
+    path = download["path"]
+
+    if not path.exists():
+        youtube_downloads.delete(download_id)
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+
+    filename = f"youtube_{download_id}.gif"
+    return FileResponse(
+        path,
+        media_type="image/gif",
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.delete("/{download_id}")
