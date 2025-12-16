@@ -344,8 +344,8 @@ function mediaUpload() {
         message: '',
         messageType: '',
 
-        init() {
-            this.restoreState();
+        async init() {
+            await this.restoreState();
             // Auto-save state when key properties change
             this.$watch('uploadId', () => this.saveState());
             this.$watch('previewUrl', () => this.saveState());
@@ -373,16 +373,32 @@ function mediaUpload() {
             localStorage.setItem('mediaUpload', JSON.stringify(state));
         },
 
-        restoreState() {
+        async restoreState() {
             const saved = localStorage.getItem('mediaUpload');
-            if (saved) {
-                try {
-                    const state = JSON.parse(saved);
-                    Object.assign(this, state);
-                } catch (e) {
-                    console.error('Erro ao restaurar estado:', e);
-                    localStorage.removeItem('mediaUpload');
+            if (!saved) return;
+
+            try {
+                const state = JSON.parse(saved);
+
+                // Validar com servidor se há uploadId
+                if (state.uploadId) {
+                    const endpoint = state.mediaType === 'gif'
+                        ? `/api/gif/preview/${state.uploadId}`
+                        : `/api/media/preview/${state.uploadId}`;
+
+                    const response = await fetch(endpoint, { method: 'HEAD' });
+                    if (!response.ok) {
+                        // Upload expirou no servidor
+                        console.log('Upload expirado, limpando estado local');
+                        localStorage.removeItem('mediaUpload');
+                        return;
+                    }
                 }
+
+                Object.assign(this, state);
+            } catch (e) {
+                console.error('Erro ao restaurar estado:', e);
+                localStorage.removeItem('mediaUpload');
             }
         },
 
@@ -672,8 +688,8 @@ function youtubeDownload() {
         message: '',
         messageType: '',
 
-        init() {
-            this.restoreState();
+        async init() {
+            await this.restoreState();
             // Auto-save state when key properties change
             this.$watch('downloadId', () => this.saveState());
             this.$watch('previewUrl', () => this.saveState());
@@ -695,16 +711,28 @@ function youtubeDownload() {
             localStorage.setItem('youtubeDownload', JSON.stringify(state));
         },
 
-        restoreState() {
+        async restoreState() {
             const saved = localStorage.getItem('youtubeDownload');
-            if (saved) {
-                try {
-                    const state = JSON.parse(saved);
-                    Object.assign(this, state);
-                } catch (e) {
-                    console.error('Erro ao restaurar estado:', e);
-                    localStorage.removeItem('youtubeDownload');
+            if (!saved) return;
+
+            try {
+                const state = JSON.parse(saved);
+
+                // Validar com servidor se há downloadId
+                if (state.downloadId) {
+                    const response = await fetch(`/api/youtube/preview/${state.downloadId}`, { method: 'HEAD' });
+                    if (!response.ok) {
+                        // Download expirou no servidor
+                        console.log('Download expirado, limpando estado local');
+                        localStorage.removeItem('youtubeDownload');
+                        return;
+                    }
                 }
+
+                Object.assign(this, state);
+            } catch (e) {
+                console.error('Erro ao restaurar estado:', e);
+                localStorage.removeItem('youtubeDownload');
             }
         },
 
