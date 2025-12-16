@@ -36,3 +36,13 @@ Processados/*.gif
 
 # Logs
 *.log
+
+# Test materials (local only)
+Materiais para testes/
+
+# MCP directories
+.playwright-mcp/
+
+# Research files (temporary)
+FRAMEWORK_DOCS.md
+RESEARCH_SUMMARY.md

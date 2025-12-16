@@ -597,12 +597,37 @@ button.secondary:hover {
     position: relative;
 }
 
+.youtube-player-container {
+    flex-shrink: 0;
+}
+
+.youtube-player {
+    width: 320px;
+    height: 180px;
+    border-radius: 0.25rem;
+}
+
 .video-thumbnail {
-    width: 160px;
-    height: 90px;
+    width: 320px;
+    height: 180px;
     object-fit: cover;
     border-radius: 0.25rem;
     flex-shrink: 0;
+}
+
+.player-error {
+    width: 320px;
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-color);
+    border-radius: 0.25rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 1rem;
 }
 
 .video-details {

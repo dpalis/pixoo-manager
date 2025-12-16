@@ -11,7 +11,8 @@ from typing import List, Optional, Tuple
 
 import imageio.v3 as iio
 import numpy as np
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageOps, ImageStat
+from scipy.ndimage import uniform_filter
 
 from app.config import MAX_CONVERT_FRAMES, PIXOO_SIZE
 from app.services.exceptions import ConversionError, TooManyFramesError
@@ -28,6 +29,7 @@ class ConvertOptions:
     focus_center: bool = False
     darken_bg: bool = False
     num_colors: int = 0  # 0 = não quantizar
+    auto_brightness: bool = True  # Ajuste automático para imagens escuras
 
 
 @dataclass
@@ -114,7 +116,7 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
     Remove halos escuros (contornos indesejados) causados por anti-aliasing.
 
     Detecta pixels escuros isolados perto de transições de cor e substitui
-    pela média dos vizinhos. Usa operações numpy vetorizadas para performance.
+    pela média dos vizinhos. Usa scipy.ndimage.uniform_filter para performance.
 
     Args:
         image: Imagem PIL em RGB
@@ -125,38 +127,21 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
         Imagem com halos removidos
     """
     img_array = np.array(image, dtype=np.float32)
-    h, w = img_array.shape[:2]
 
     # Calcular luminosidade
     luminosity = np.mean(img_array, axis=2)
 
-    # Calcular média dos vizinhos usando sliding window (numpy vectorizado)
-    # Criar view com padding para evitar bordas
-    padded_lum = np.pad(luminosity, radius, mode='edge')
-    padded_img = np.pad(img_array, ((radius, radius), (radius, radius), (0, 0)), mode='edge')
-
-    # Calcular soma de vizinhos usando slicing (evita loops)
+    # Calcular média dos vizinhos usando uniform_filter (O(n) vs O(n*k²))
     kernel_size = 2 * radius + 1
-    neighbor_sum = np.zeros_like(luminosity)
-    neighbor_count = kernel_size * kernel_size
-
-    for dy in range(kernel_size):
-        for dx in range(kernel_size):
-            neighbor_sum += padded_lum[dy:dy+h, dx:dx+w]
-
-    neighbor_avg = neighbor_sum / neighbor_count
+    neighbor_avg = uniform_filter(luminosity, size=kernel_size, mode='nearest')
 
     # Criar máscara de pixels que são halos (muito mais escuros que vizinhos)
     is_halo = luminosity < (neighbor_avg - threshold)
 
-    # Calcular média dos vizinhos para cada canal RGB
+    # Calcular média dos vizinhos para cada canal RGB e aplicar
     result = img_array.copy()
     for c in range(3):
-        channel_sum = np.zeros((h, w), dtype=np.float32)
-        for dy in range(kernel_size):
-            for dx in range(kernel_size):
-                channel_sum += padded_img[dy:dy+h, dx:dx+w, c]
-        channel_avg = channel_sum / neighbor_count
+        channel_avg = uniform_filter(img_array[:, :, c], size=kernel_size, mode='nearest')
         result[:, :, c] = np.where(is_halo, channel_avg, img_array[:, :, c])
 
     # Pillow 12+ deprecou o parâmetro mode em fromarray
@@ -208,11 +193,55 @@ def enhance_contrast(image: Image.Image, factor: float = 1.1) -> Image.Image:
     return enhancer.enhance(factor)
 
 
+def detect_brightness(image: Image.Image) -> float:
+    """
+    Detecta brilho médio da imagem usando RMS (Root Mean Square).
+
+    RMS é melhor que média simples porque considera variância.
+
+    Args:
+        image: Imagem PIL (qualquer modo)
+
+    Returns:
+        Brilho normalizado (0.0 a 1.0)
+    """
+    # Converter para grayscale para cálculo de luminosidade
+    grayscale = image.convert('L')
+    stat = ImageStat.Stat(grayscale)
+
+    # RMS normalizado para 0-1
+    return stat.rms[0] / 255.0
+
+
+def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
+    """
+    Aplica correção gamma para clarear tons escuros.
+
+    Gamma < 1.0: Clareia (0.5-0.7 para imagens escuras)
+    Gamma = 1.0: Sem mudança
+    Gamma > 1.0: Escurece
+
+    Args:
+        image: Imagem PIL em RGB
+        gamma: Fator de correção
+
+    Returns:
+        Imagem com gamma corrigido
+    """
+    # Criar lookup table para performance
+    inv_gamma = 1.0 / gamma
+    lut = [int((i / 255.0) ** inv_gamma * 255.0) for i in range(256)]
+
+    # Aplicar LUT a cada canal (RGB = 3 canais)
+    return image.point(lut * 3)
+
+
 def enhance_for_led_display(
     image: Image.Image,
     contrast: float = 1.4,
     saturation: float = 1.3,
-    sharpness: float = 1.5
+    sharpness: float = 1.5,
+    auto_brightness: bool = True
 ) -> Image.Image:
     """
     Otimiza imagem para displays LED como Pixoo 64.
@@ -221,17 +250,38 @@ def enhance_for_led_display(
     - Aumenta saturação para cores mais vivas no LED
     - Aplica sharpening para definição
 
+    Se auto_brightness=True, detecta brilho e ajusta parâmetros:
+    - Imagens escuras (brightness < 0.3): gamma correction + parâmetros suaves
+    - Imagens normais: parâmetros padrão
+
     Args:
         image: Imagem PIL
-        contrast: Fator de contraste
+        contrast: Fator de contraste (ignorado se auto_brightness e imagem escura)
         saturation: Fator de saturação
         sharpness: Fator de nitidez
+        auto_brightness: Detectar e ajustar automaticamente
 
     Returns:
         Imagem otimizada para LED
     """
+    img = image
+
+    # Detecção e ajuste para imagens escuras
+    if auto_brightness:
+        brightness = detect_brightness(image)
+
+        if brightness < 0.3:  # Imagem escura
+            # Passo 1: Gamma correction para clarear tons escuros
+            img = apply_gamma_correction(img, gamma=0.6)
+
+            # Passo 2: Contraste mais suave (não esmagar tons)
+            contrast = 1.15
+
+            # Passo 3: Saturação reduzida (tons escuros ficam estranhos com alta saturação)
+            saturation = 1.1
+
     # 1. Contraste - separa figura do fundo
-    img = ImageEnhance.Contrast(image).enhance(contrast)
+    img = ImageEnhance.Contrast(img).enhance(contrast)
 
     # 2. Saturação - cores mais vivas
     img = ImageEnhance.Color(img).enhance(saturation)
@@ -340,6 +390,93 @@ def quantize_colors(image: Image.Image, num_colors: int = 32) -> Image.Image:
     return quantized.convert('RGB')
 
 
+def create_global_palette(
+    frames: List[Image.Image],
+    num_colors: int = 256,
+    sample_rate: int = 4,
+    pixels_per_frame: int = 1000
+) -> Image.Image:
+    """
+    Cria paleta de cores otimizada a partir de múltiplos frames.
+
+    Usa amostragem de pixels (não concatenação de imagens) para
+    baixo consumo de memória (~10KB vs ~850KB).
+
+    Args:
+        frames: Lista de frames PIL em RGB
+        num_colors: Número de cores na paleta (max 256 para GIF)
+        sample_rate: Amostrar 1 a cada N frames (para performance)
+        pixels_per_frame: Máximo de pixels por frame para amostragem
+
+    Returns:
+        Imagem quantizada com paleta otimizada (usar .palette)
+    """
+    if not frames:
+        raise ConversionError("Lista de frames vazia")
+
+    # Amostrar frames para não usar memória demais
+    sampled = frames[::sample_rate] if len(frames) > sample_rate else frames
+
+    # Coletar pixels amostrados de todos os frames
+    all_pixels = []
+    for frame in sampled:
+        rgb_frame = frame.convert('RGB')
+        pixels = list(rgb_frame.getdata())
+
+        # Amostrar pixels uniformemente se muitos
+        if len(pixels) > pixels_per_frame:
+            step = len(pixels) // pixels_per_frame
+            pixels = pixels[::step][:pixels_per_frame]
+
+        all_pixels.extend(pixels)
+
+    # Criar imagem quadrada com os pixels amostrados
+    # Tamanho mínimo para conter todos os pixels
+    sample_size = int(len(all_pixels) ** 0.5) + 1
+    sample_image = Image.new('RGB', (sample_size, sample_size))
+    sample_image.putdata(all_pixels[:sample_size * sample_size])
+
+    # Quantizar para obter paleta otimizada
+    palette_image = sample_image.quantize(
+        colors=num_colors,
+        method=Image.Quantize.MEDIANCUT  # Rápido e bom para animações
+    )
+
+    return palette_image
+
+
+def apply_palette_to_frames(
+    frames: List[Image.Image],
+    palette_image: Image.Image
+) -> List[Image.Image]:
+    """
+    Aplica mesma paleta a todos os frames para consistência.
+
+    Usa dither=0 (sem dithering) para evitar artefatos temporais.
+    Trade-off: gradientes podem ter banding, mas animação será suave.
+
+    Args:
+        frames: Lista de frames PIL
+        palette_image: Imagem quantizada com paleta (de create_global_palette)
+
+    Returns:
+        Lista de frames quantizados com paleta consistente
+    """
+    result = []
+
+    for frame in frames:
+        # Converter para RGB e aplicar paleta
+        rgb_frame = frame.convert('RGB')
+        quantized = rgb_frame.quantize(
+            palette=palette_image,
+            dither=0  # Sem dithering = consistência temporal
+        )
+        # Converter de volta para RGB para compatibilidade
+        result.append(quantized.convert('RGB'))
+
+    return result
+
+
 def is_pixoo_ready(path: Path) -> bool:
     """
     Verifica se um GIF já está no formato correto para o Pixoo (64x64).
@@ -426,7 +563,13 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
 
     # Otimização para LED display (mais agressiva)
     if options.led_optimize:
-        converted = enhance_for_led_display(converted, contrast=1.4, saturation=1.3, sharpness=1.5)
+        converted = enhance_for_led_display(
+            converted,
+            contrast=1.4,
+            saturation=1.3,
+            sharpness=1.5,
+            auto_brightness=options.auto_brightness
+        )
 
     # Escurecer fundo para destacar figura clara
     if options.darken_bg:
@@ -488,6 +631,11 @@ def convert_gif(
 
         converted = convert_image_pil(frame, options)
         converted_frames.append(converted)
+
+    # Aplicar paleta global para consistência (anti-flickering)
+    if len(converted_frames) > 1:
+        global_palette = create_global_palette(converted_frames, num_colors=256, sample_rate=4)
+        converted_frames = apply_palette_to_frames(converted_frames, global_palette)
 
     # Criar arquivo de saída
     output_path = create_temp_output(".gif")

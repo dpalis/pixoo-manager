@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR, TEMP_DIR
 from app.routers import connection as connection_router
 from app.routers import gif_upload as gif_router
+from app.routers import heartbeat as heartbeat_router
 from app.routers import media_upload as media_router
 from app.routers import youtube as youtube_router
 from app.middleware import CSRFMiddleware
@@ -27,20 +28,32 @@ from app.middleware import CSRFMiddleware
 # Modo headless (sem abrir browser) para testes/automação
 HEADLESS = os.getenv("PIXOO_HEADLESS", "false").lower() == "true"
 
+# Disable auto-shutdown for development (can be set via env var)
+AUTO_SHUTDOWN = os.getenv("PIXOO_AUTO_SHUTDOWN", "true").lower() == "true"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Gerencia ciclo de vida da aplicação.
 
-    Startup: Abre browser (se não headless)
+    Startup: Abre browser (se não headless), inicia monitor de inatividade
     Shutdown: Limpa arquivos temporários e desconecta do Pixoo
     """
     # Startup
     if not HEADLESS:
         webbrowser.open(f"http://{HOST}:{PORT}")
 
+    # Start inactivity monitor if enabled
+    if AUTO_SHUTDOWN and not HEADLESS:
+        heartbeat_router.start_inactivity_monitor()
+    else:
+        heartbeat_router.disable_auto_shutdown()
+
     yield
+
+    # Stop inactivity monitor
+    heartbeat_router.stop_inactivity_monitor()
 
     # Shutdown cleanup
     try:
@@ -92,12 +105,14 @@ async def add_security_headers(request: Request, call_next):
 
     # Content Security Policy
     # 'unsafe-eval' necessário para Alpine.js
+    # frame-src para YouTube IFrame API
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob:; "
+        "img-src 'self' data: blob: https://i.ytimg.com https://*.ytimg.com; "
         "font-src 'self'; "
+        "frame-src https://www.youtube.com; "
         "frame-ancestors 'none'"
     )
 
@@ -113,6 +128,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 # Registra routers da API
 app.include_router(connection_router.router)
 app.include_router(gif_router.router)
+app.include_router(heartbeat_router.router)
 app.include_router(media_router.router)
 app.include_router(youtube_router.router)
 
