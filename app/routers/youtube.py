@@ -197,7 +197,11 @@ async def get_preview_scaled(
         return StreamingResponse(
             output,
             media_type="image/gif",
-            headers={"Content-Disposition": f"inline; filename=youtube_scaled_{download_id}.gif"}
+            headers={
+                "Content-Disposition": f"inline; filename=youtube_scaled_{download_id}.gif",
+                "Cache-Control": "public, max-age=3600",
+                "ETag": f'"{download_id}:{scale}"'
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao escalar imagem: {e}")
