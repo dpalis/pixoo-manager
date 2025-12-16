@@ -28,6 +28,8 @@ from app.services.exceptions import ConversionError, VideoTooLongError
 from app.services.gif_converter import (
     ConvertOptions,
     adaptive_downscale,
+    apply_palette_to_frames,
+    create_global_palette,
     enhance_for_led_display,
     quantize_colors,
 )
@@ -233,6 +235,17 @@ def convert_video_to_gif(
 
         if progress_callback:
             progress_callback("processing", 1.0)
+
+        # Criar paleta global para consistência (anti-flickering)
+        if progress_callback:
+            progress_callback("optimizing", 0.0)
+
+        if len(processed_frames) > 1:
+            global_palette = create_global_palette(processed_frames, num_colors=256, sample_rate=4)
+            processed_frames = apply_palette_to_frames(processed_frames, global_palette)
+
+        if progress_callback:
+            progress_callback("optimizing", 1.0)
             progress_callback("saving", 0.5)
 
         # Salvar como GIF

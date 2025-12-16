@@ -269,10 +269,17 @@
                     </div>
                 </div>
 
-                <!-- Info do video -->
+                <!-- Info do video e player -->
                 <template x-if="videoInfo">
                     <div class="video-info-card">
-                        <img :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
+                        <!-- Player YouTube (substituir thumbnail quando pronto) -->
+                        <div class="youtube-player-container">
+                            <div x-show="playerReady" :id="'youtube-player-' + videoInfo.id" class="youtube-player"></div>
+                            <img x-show="!playerReady && !playerError" :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
+                            <div x-show="playerError" class="player-error">
+                                Este vídeo não permite incorporação. Selecione o trecho e baixe diretamente.
+                            </div>
+                        </div>
                         <div class="video-details">
                             <h3 x-text="videoInfo.title"></h3>
                             <p class="channel" x-text="videoInfo.channel"></p>
@@ -379,6 +386,18 @@
 
     <!-- Cropper.js - Recorte de imagens -->
     <script src="/static/vendor/cropper.min.js"></script>
+
+    <!-- YouTube IFrame API -->
+    <script>
+        // Flag global para saber quando API está pronta
+        window.youtubeApiReady = false;
+        window.onYouTubeIframeAPIReady = function() {
+            window.youtubeApiReady = true;
+            // Dispara evento para Alpine.js
+            window.dispatchEvent(new CustomEvent('youtube-api-ready'));
+        };
+    </script>
+    <script src="https://www.youtube.com/iframe_api"></script>
 
     <!-- Alpine.js - Interatividade -->
     <script src="/static/vendor/alpine.min.js" defer></script>

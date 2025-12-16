@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 
 import imageio.v3 as iio
 import numpy as np
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageOps, ImageStat
 
 from app.config import MAX_CONVERT_FRAMES, PIXOO_SIZE
 from app.services.exceptions import ConversionError, TooManyFramesError
@@ -28,6 +28,7 @@ class ConvertOptions:
     focus_center: bool = False
     darken_bg: bool = False
     num_colors: int = 0  # 0 = não quantizar
+    auto_brightness: bool = True  # Ajuste automático para imagens escuras
 
 
 @dataclass
@@ -208,11 +209,55 @@ def enhance_contrast(image: Image.Image, factor: float = 1.1) -> Image.Image:
     return enhancer.enhance(factor)
 
 
+def detect_brightness(image: Image.Image) -> float:
+    """
+    Detecta brilho médio da imagem usando RMS (Root Mean Square).
+
+    RMS é melhor que média simples porque considera variância.
+
+    Args:
+        image: Imagem PIL (qualquer modo)
+
+    Returns:
+        Brilho normalizado (0.0 a 1.0)
+    """
+    # Converter para grayscale para cálculo de luminosidade
+    grayscale = image.convert('L')
+    stat = ImageStat.Stat(grayscale)
+
+    # RMS normalizado para 0-1
+    return stat.rms[0] / 255.0
+
+
+def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
+    """
+    Aplica correção gamma para clarear tons escuros.
+
+    Gamma < 1.0: Clareia (0.5-0.7 para imagens escuras)
+    Gamma = 1.0: Sem mudança
+    Gamma > 1.0: Escurece
+
+    Args:
+        image: Imagem PIL em RGB
+        gamma: Fator de correção
+
+    Returns:
+        Imagem com gamma corrigido
+    """
+    # Criar lookup table para performance
+    inv_gamma = 1.0 / gamma
+    lut = [int((i / 255.0) ** inv_gamma * 255.0) for i in range(256)]
+
+    # Aplicar LUT a cada canal (RGB = 3 canais)
+    return image.point(lut * 3)
+
+
 def enhance_for_led_display(
     image: Image.Image,
     contrast: float = 1.4,
     saturation: float = 1.3,
-    sharpness: float = 1.5
+    sharpness: float = 1.5,
+    auto_brightness: bool = True
 ) -> Image.Image:
     """
     Otimiza imagem para displays LED como Pixoo 64.
@@ -221,17 +266,38 @@ def enhance_for_led_display(
     - Aumenta saturação para cores mais vivas no LED
     - Aplica sharpening para definição
 
+    Se auto_brightness=True, detecta brilho e ajusta parâmetros:
+    - Imagens escuras (brightness < 0.3): gamma correction + parâmetros suaves
+    - Imagens normais: parâmetros padrão
+
     Args:
         image: Imagem PIL
-        contrast: Fator de contraste
+        contrast: Fator de contraste (ignorado se auto_brightness e imagem escura)
         saturation: Fator de saturação
         sharpness: Fator de nitidez
+        auto_brightness: Detectar e ajustar automaticamente
 
     Returns:
         Imagem otimizada para LED
     """
+    img = image
+
+    # Detecção e ajuste para imagens escuras
+    if auto_brightness:
+        brightness = detect_brightness(image)
+
+        if brightness < 0.3:  # Imagem escura
+            # Passo 1: Gamma correction para clarear tons escuros
+            img = apply_gamma_correction(img, gamma=0.6)
+
+            # Passo 2: Contraste mais suave (não esmagar tons)
+            contrast = 1.15
+
+            # Passo 3: Saturação reduzida (tons escuros ficam estranhos com alta saturação)
+            saturation = 1.1
+
     # 1. Contraste - separa figura do fundo
-    img = ImageEnhance.Contrast(image).enhance(contrast)
+    img = ImageEnhance.Contrast(img).enhance(contrast)
 
     # 2. Saturação - cores mais vivas
     img = ImageEnhance.Color(img).enhance(saturation)
@@ -340,6 +406,80 @@ def quantize_colors(image: Image.Image, num_colors: int = 32) -> Image.Image:
     return quantized.convert('RGB')
 
 
+def create_global_palette(
+    frames: List[Image.Image],
+    num_colors: int = 256,
+    sample_rate: int = 4
+) -> Image.Image:
+    """
+    Cria paleta de cores otimizada a partir de múltiplos frames.
+
+    Combina pixels de frames amostrados para criar paleta consistente.
+    Usa median cut (rápido e bom para animações).
+
+    Args:
+        frames: Lista de frames PIL em RGB
+        num_colors: Número de cores na paleta (max 256 para GIF)
+        sample_rate: Amostrar 1 a cada N frames (para performance)
+
+    Returns:
+        Imagem quantizada com paleta otimizada (usar .palette)
+    """
+    if not frames:
+        raise ConversionError("Lista de frames vazia")
+
+    # Amostrar frames para não usar memória demais
+    sampled = frames[::sample_rate] if len(frames) > sample_rate else frames
+
+    # Combinar pixels de todos os frames amostrados
+    width, height = frames[0].size
+    combined_width = width * len(sampled)
+    combined = Image.new('RGB', (combined_width, height))
+
+    for i, frame in enumerate(sampled):
+        combined.paste(frame.convert('RGB'), (i * width, 0))
+
+    # Quantizar para obter paleta otimizada
+    palette_image = combined.quantize(
+        colors=num_colors,
+        method=Image.Quantize.MEDIANCUT  # Rápido e bom para animações
+    )
+
+    return palette_image
+
+
+def apply_palette_to_frames(
+    frames: List[Image.Image],
+    palette_image: Image.Image
+) -> List[Image.Image]:
+    """
+    Aplica mesma paleta a todos os frames para consistência.
+
+    Usa dither=0 (sem dithering) para evitar artefatos temporais.
+    Trade-off: gradientes podem ter banding, mas animação será suave.
+
+    Args:
+        frames: Lista de frames PIL
+        palette_image: Imagem quantizada com paleta (de create_global_palette)
+
+    Returns:
+        Lista de frames quantizados com paleta consistente
+    """
+    result = []
+
+    for frame in frames:
+        # Converter para RGB e aplicar paleta
+        rgb_frame = frame.convert('RGB')
+        quantized = rgb_frame.quantize(
+            palette=palette_image,
+            dither=0  # Sem dithering = consistência temporal
+        )
+        # Converter de volta para RGB para compatibilidade
+        result.append(quantized.convert('RGB'))
+
+    return result
+
+
 def is_pixoo_ready(path: Path) -> bool:
     """
     Verifica se um GIF já está no formato correto para o Pixoo (64x64).
@@ -426,7 +566,13 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
 
     # Otimização para LED display (mais agressiva)
     if options.led_optimize:
-        converted = enhance_for_led_display(converted, contrast=1.4, saturation=1.3, sharpness=1.5)
+        converted = enhance_for_led_display(
+            converted,
+            contrast=1.4,
+            saturation=1.3,
+            sharpness=1.5,
+            auto_brightness=options.auto_brightness
+        )
 
     # Escurecer fundo para destacar figura clara
     if options.darken_bg:
@@ -488,6 +634,11 @@ def convert_gif(
 
         converted = convert_image_pil(frame, options)
         converted_frames.append(converted)
+
+    # Aplicar paleta global para consistência (anti-flickering)
+    if len(converted_frames) > 1:
+        global_palette = create_global_palette(converted_frames, num_colors=256, sample_rate=4)
+        converted_frames = apply_palette_to_frames(converted_frames, global_palette)
 
     # Criar arquivo de saída
     output_path = create_temp_output(".gif")
