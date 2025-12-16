@@ -424,6 +424,21 @@ function mediaUpload() {
             this.dragOver = false;
             const files = event.dataTransfer.files;
             if (files.length > 0) {
+                // Se ja tem arquivo carregado, limpar antes de processar novo
+                if (this.hasFile) {
+                    if (this.videoUrl) {
+                        URL.revokeObjectURL(this.videoUrl);
+                    }
+                    this.file = null;
+                    this.uploadId = null;
+                    this.mediaType = null;
+                    this.previewUrl = null;
+                    this.videoUrl = null;
+                    this.converted = false;
+                    this.convertedPreviewUrl = null;
+                    this.convertedFrames = 0;
+                    this.clearMessage();
+                }
                 this.processFile(files[0]);
             }
         },

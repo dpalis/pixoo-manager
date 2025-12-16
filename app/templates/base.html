@@ -65,7 +65,10 @@
         <section class="content">
             {% if active_tab == 'media' %}
             <!-- Tab: Mídia (GIF, Foto, Video) -->
-            <div class="tab-content" x-data="mediaUpload()">
+            <div class="tab-content" x-data="mediaUpload()"
+                 @dragover.prevent="dragOver = true"
+                 @dragleave.prevent="dragOver = false"
+                 @drop.prevent="handleDrop($event)">
                 <h2>Mídia para Pixoo</h2>
                 <p class="description">Arraste GIFs, fotos ou vídeos (max 10s). Arquivos são convertidos automaticamente para 64x64.</p>
 

@@ -11,7 +11,7 @@ PIXOO_SIZE = 64
 MAX_UPLOAD_FRAMES = 40      # Limite seguro para envio ao Pixoo
 MAX_CONVERT_FRAMES = 92     # Limite máximo de frames do Pixoo
 MAX_VIDEO_DURATION = 10.0   # Segundos máximos de vídeo
-PREVIEW_SCALE = 32          # Escala do preview (64 * 32 = 2048px)
+PREVIEW_SCALE = 64          # Escala do preview (64 * 64 = 4096px)
 
 # Limites de arquivo
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB em bytes

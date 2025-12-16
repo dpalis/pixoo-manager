@@ -177,7 +177,7 @@ async def get_gif_preview(upload_id: str):
 @router.get("/preview/{upload_id}/scaled")
 async def get_gif_preview_scaled(
     upload_id: str,
-    scale: int = Query(default=16, ge=1, le=32)
+    scale: int = Query(default=16, ge=1, le=64)
 ):
     """
     Retorna o GIF escalado para melhor visualização.

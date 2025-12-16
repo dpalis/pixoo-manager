@@ -123,6 +123,7 @@ body {
    ============================================ */
 .tabs {
     display: flex;
+    justify-content: flex-start;
     gap: 0.5rem;
     margin-bottom: 1.5rem;
     border-bottom: 2px solid var(--border-color);
