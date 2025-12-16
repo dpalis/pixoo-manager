@@ -10,6 +10,7 @@ sse-starlette>=1.8.0
 Pillow>=10.0.0
 imageio>=2.31.0
 numpy>=1.24.0
+scipy>=1.11.0
 
 # Video
 moviepy>=1.0.3

@@ -12,6 +12,7 @@ from typing import List, Optional, Tuple
 import imageio.v3 as iio
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps, ImageStat
+from scipy.ndimage import uniform_filter
 
 from app.config import MAX_CONVERT_FRAMES, PIXOO_SIZE
 from app.services.exceptions import ConversionError, TooManyFramesError
@@ -115,7 +116,7 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
     Remove halos escuros (contornos indesejados) causados por anti-aliasing.
 
     Detecta pixels escuros isolados perto de transições de cor e substitui
-    pela média dos vizinhos. Usa operações numpy vetorizadas para performance.
+    pela média dos vizinhos. Usa scipy.ndimage.uniform_filter para performance.
 
     Args:
         image: Imagem PIL em RGB
@@ -126,38 +127,21 @@ def remove_dark_halos(image: Image.Image, threshold: int = 40, radius: int = 1) 
         Imagem com halos removidos
     """
     img_array = np.array(image, dtype=np.float32)
-    h, w = img_array.shape[:2]
 
     # Calcular luminosidade
     luminosity = np.mean(img_array, axis=2)
 
-    # Calcular média dos vizinhos usando sliding window (numpy vectorizado)
-    # Criar view com padding para evitar bordas
-    padded_lum = np.pad(luminosity, radius, mode='edge')
-    padded_img = np.pad(img_array, ((radius, radius), (radius, radius), (0, 0)), mode='edge')
-
-    # Calcular soma de vizinhos usando slicing (evita loops)
+    # Calcular média dos vizinhos usando uniform_filter (O(n) vs O(n*k²))
     kernel_size = 2 * radius + 1
-    neighbor_sum = np.zeros_like(luminosity)
-    neighbor_count = kernel_size * kernel_size
-
-    for dy in range(kernel_size):
-        for dx in range(kernel_size):
-            neighbor_sum += padded_lum[dy:dy+h, dx:dx+w]
-
-    neighbor_avg = neighbor_sum / neighbor_count
+    neighbor_avg = uniform_filter(luminosity, size=kernel_size, mode='nearest')
 
     # Criar máscara de pixels que são halos (muito mais escuros que vizinhos)
     is_halo = luminosity < (neighbor_avg - threshold)
 
-    # Calcular média dos vizinhos para cada canal RGB
+    # Calcular média dos vizinhos para cada canal RGB e aplicar
     result = img_array.copy()
     for c in range(3):
-        channel_sum = np.zeros((h, w), dtype=np.float32)
-        for dy in range(kernel_size):
-            for dx in range(kernel_size):
-                channel_sum += padded_img[dy:dy+h, dx:dx+w, c]
-        channel_avg = channel_sum / neighbor_count
+        channel_avg = uniform_filter(img_array[:, :, c], size=kernel_size, mode='nearest')
         result[:, :, c] = np.where(is_halo, channel_avg, img_array[:, :, c])
 
     # Pillow 12+ deprecou o parâmetro mode em fromarray
@@ -409,18 +393,20 @@ def quantize_colors(image: Image.Image, num_colors: int = 32) -> Image.Image:
 def create_global_palette(
     frames: List[Image.Image],
     num_colors: int = 256,
-    sample_rate: int = 4
+    sample_rate: int = 4,
+    pixels_per_frame: int = 1000
 ) -> Image.Image:
     """
     Cria paleta de cores otimizada a partir de múltiplos frames.
 
-    Combina pixels de frames amostrados para criar paleta consistente.
-    Usa median cut (rápido e bom para animações).
+    Usa amostragem de pixels (não concatenação de imagens) para
+    baixo consumo de memória (~10KB vs ~850KB).
 
     Args:
         frames: Lista de frames PIL em RGB
         num_colors: Número de cores na paleta (max 256 para GIF)
         sample_rate: Amostrar 1 a cada N frames (para performance)
+        pixels_per_frame: Máximo de pixels por frame para amostragem
 
     Returns:
         Imagem quantizada com paleta otimizada (usar .palette)
@@ -431,16 +417,27 @@ def create_global_palette(
     # Amostrar frames para não usar memória demais
     sampled = frames[::sample_rate] if len(frames) > sample_rate else frames
 
-    # Combinar pixels de todos os frames amostrados
-    width, height = frames[0].size
-    combined_width = width * len(sampled)
-    combined = Image.new('RGB', (combined_width, height))
+    # Coletar pixels amostrados de todos os frames
+    all_pixels = []
+    for frame in sampled:
+        rgb_frame = frame.convert('RGB')
+        pixels = list(rgb_frame.getdata())
 
-    for i, frame in enumerate(sampled):
-        combined.paste(frame.convert('RGB'), (i * width, 0))
+        # Amostrar pixels uniformemente se muitos
+        if len(pixels) > pixels_per_frame:
+            step = len(pixels) // pixels_per_frame
+            pixels = pixels[::step][:pixels_per_frame]
+
+        all_pixels.extend(pixels)
+
+    # Criar imagem quadrada com os pixels amostrados
+    # Tamanho mínimo para conter todos os pixels
+    sample_size = int(len(all_pixels) ** 0.5) + 1
+    sample_image = Image.new('RGB', (sample_size, sample_size))
+    sample_image.putdata(all_pixels[:sample_size * sample_size])
 
     # Quantizar para obter paleta otimizada
-    palette_image = combined.quantize(
+    palette_image = sample_image.quantize(
         colors=num_colors,
         method=Image.Quantize.MEDIANCUT  # Rápido e bom para animações
     )

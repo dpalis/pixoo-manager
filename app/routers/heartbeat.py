@@ -7,104 +7,65 @@ within the timeout period, the server shuts down automatically.
 
 import asyncio
 import os
-import sys
+import signal
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+
+from app.middleware import RateLimiter, check_rate_limit
 
 router = APIRouter()
 
-# Global state for heartbeat tracking
+# Thread-safe state using asyncio.Lock
+_lock = asyncio.Lock()
 _last_heartbeat: float = time.time()
 _shutdown_task: Optional[asyncio.Task] = None
 _enabled: bool = True
+
+# Rate limiter: max 6 requests per minute (every 10s is generous)
+_heartbeat_limiter = RateLimiter(max_requests=6, window_seconds=60)
 
 # Configuration
 HEARTBEAT_INTERVAL = 30  # Browser sends every 30s
 INACTIVITY_TIMEOUT = 120  # Shutdown after 2 minutes without heartbeat
 
 
+async def _get_enabled() -> bool:
+    """Thread-safe getter for _enabled."""
+    async with _lock:
+        return _enabled
+
+
+async def _set_enabled(value: bool) -> None:
+    """Thread-safe setter for _enabled."""
+    global _enabled
+    async with _lock:
+        _enabled = value
+
+
+async def _get_last_heartbeat() -> float:
+    """Thread-safe getter for _last_heartbeat."""
+    async with _lock:
+        return _last_heartbeat
+
+
+async def _update_heartbeat() -> float:
+    """Thread-safe update of _last_heartbeat. Returns new timestamp."""
+    global _last_heartbeat
+    async with _lock:
+        _last_heartbeat = time.time()
+        return _last_heartbeat
+
+
 def disable_auto_shutdown():
-    """Disable auto-shutdown (for development mode)."""
+    """
+    Disable auto-shutdown (for development mode).
+
+    Note: This is sync for use during startup before event loop.
+    """
     global _enabled
     _enabled = False
-
-
-def enable_auto_shutdown():
-    """Enable auto-shutdown."""
-    global _enabled
-    _enabled = True
-
-
-def is_auto_shutdown_enabled() -> bool:
-    """Check if auto-shutdown is enabled."""
-    return _enabled
-
-
-def update_heartbeat():
-    """Update the last heartbeat timestamp."""
-    global _last_heartbeat
-    _last_heartbeat = time.time()
-
-
-def get_time_since_heartbeat() -> float:
-    """Get seconds since last heartbeat."""
-    return time.time() - _last_heartbeat
-
-
-@router.post("/api/heartbeat")
-async def heartbeat():
-    """
-    Receive heartbeat from browser.
-
-    Called periodically by the frontend to indicate the browser is still open.
-    """
-    update_heartbeat()
-    return {"status": "ok", "timestamp": _last_heartbeat}
-
-
-@router.get("/api/heartbeat/status")
-async def heartbeat_status():
-    """
-    Get heartbeat status.
-
-    Useful for debugging.
-    """
-    return {
-        "enabled": _enabled,
-        "last_heartbeat": _last_heartbeat,
-        "seconds_since": get_time_since_heartbeat(),
-        "timeout": INACTIVITY_TIMEOUT
-    }
-
-
-async def check_inactivity():
-    """
-    Background task that checks for inactivity.
-
-    Shuts down the application if no heartbeat is received within timeout.
-    """
-    global _shutdown_task
-
-    while True:
-        await asyncio.sleep(30)  # Check every 30 seconds
-
-        if not _enabled:
-            continue
-
-        time_since = get_time_since_heartbeat()
-
-        if time_since > INACTIVITY_TIMEOUT:
-            print(f"No heartbeat for {time_since:.0f}s. Shutting down...")
-            # Try to quit rumps gracefully
-            try:
-                import rumps
-                rumps.quit_application()
-            except (ImportError, AttributeError):
-                pass
-            # Exit the process
-            os._exit(0)
 
 
 def start_inactivity_monitor():
@@ -113,17 +74,17 @@ def start_inactivity_monitor():
 
     Should be called from FastAPI startup event.
     """
-    global _shutdown_task
+    global _shutdown_task, _last_heartbeat
 
     # Don't start if disabled
     if not _enabled:
         return None
 
     # Update heartbeat to start fresh
-    update_heartbeat()
+    _last_heartbeat = time.time()
 
     # Create the task
-    _shutdown_task = asyncio.create_task(check_inactivity())
+    _shutdown_task = asyncio.create_task(_check_inactivity())
     return _shutdown_task
 
 
@@ -137,3 +98,87 @@ def stop_inactivity_monitor():
     if _shutdown_task:
         _shutdown_task.cancel()
         _shutdown_task = None
+
+
+@router.post("/api/heartbeat")
+async def heartbeat(request: Request):
+    """
+    Receive heartbeat from browser.
+
+    Called periodically by the frontend to indicate the browser is still open.
+    Rate limited to prevent abuse.
+    """
+    # Rate limit check (uses IP as key for defense in depth)
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(_heartbeat_limiter, client_ip)
+
+    timestamp = await _update_heartbeat()
+    return {"status": "ok", "timestamp": timestamp}
+
+
+@router.get("/api/heartbeat/status")
+async def heartbeat_status():
+    """
+    Get heartbeat status.
+
+    Returns only non-sensitive operational data.
+    """
+    enabled = await _get_enabled()
+    return {
+        "enabled": enabled,
+        "timeout": INACTIVITY_TIMEOUT
+    }
+
+
+@router.post("/api/system/shutdown")
+async def shutdown():
+    """
+    Trigger graceful shutdown via API.
+
+    Agent-native endpoint for menu bar "Quit" action.
+    """
+    asyncio.create_task(_graceful_shutdown())
+    return {"status": "shutting_down"}
+
+
+async def _check_inactivity():
+    """
+    Background task that checks for inactivity.
+
+    Shuts down the application if no heartbeat is received within timeout.
+    """
+    while True:
+        await asyncio.sleep(30)  # Check every 30 seconds
+
+        enabled = await _get_enabled()
+        if not enabled:
+            continue
+
+        last = await _get_last_heartbeat()
+        time_since = time.time() - last
+
+        if time_since > INACTIVITY_TIMEOUT:
+            print(f"No heartbeat for {time_since:.0f}s. Shutting down...")
+            await _graceful_shutdown()
+            return
+
+
+async def _graceful_shutdown():
+    """
+    Perform graceful shutdown using SIGTERM.
+
+    This allows FastAPI's lifespan to run cleanup (disconnect Pixoo,
+    clean temp files, etc.) instead of os._exit() which bypasses everything.
+    """
+    # Give time for response to be sent
+    await asyncio.sleep(0.5)
+
+    # Try to quit rumps gracefully (macOS menu bar)
+    try:
+        import rumps
+        rumps.quit_application()
+    except (ImportError, AttributeError):
+        pass
+
+    # Send SIGTERM to self for graceful shutdown
+    os.kill(os.getpid(), signal.SIGTERM)
