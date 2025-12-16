@@ -11,7 +11,7 @@ Endpoints:
 import asyncio
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -215,7 +215,10 @@ async def get_media_preview(upload_id: str):
 
 
 @router.get("/preview/{upload_id}/scaled")
-async def get_media_preview_scaled(upload_id: str, scale: int = 16):
+async def get_media_preview_scaled(
+    upload_id: str,
+    scale: int = Query(default=16, ge=1, le=32)
+):
     """
     Retorna o GIF escalado para melhor visualização.
 
@@ -482,7 +485,10 @@ async def download_media(upload_id: str):
     Download do GIF processado (64x64).
 
     Permite ao usuário salvar o GIF convertido em seu computador.
+
+    Rate limited: 10 requisições por minuto.
     """
+    check_rate_limit(upload_limiter)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")

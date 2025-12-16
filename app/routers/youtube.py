@@ -11,7 +11,7 @@ Endpoints:
 import uuid
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
@@ -170,7 +170,10 @@ async def get_preview(download_id: str):
 
 
 @router.get("/preview/{download_id}/scaled")
-async def get_preview_scaled(download_id: str, scale: int = 16):
+async def get_preview_scaled(
+    download_id: str,
+    scale: int = Query(default=16, ge=1, le=32)
+):
     """
     Retorna o GIF escalado para melhor visualização.
 
@@ -285,13 +288,16 @@ async def send_to_pixoo(request: SendRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/download-gif/{download_id}")
+@router.get("/download/{download_id}")
 async def download_youtube_gif(download_id: str):
     """
     Download do GIF processado (64x64).
 
     Permite ao usuário salvar o GIF convertido em seu computador.
+
+    Rate limited: 5 requisições por minuto.
     """
+    check_rate_limit(youtube_limiter)
     download = youtube_downloads.get(download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Download nao encontrado")

@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Dict
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -174,7 +174,10 @@ async def get_gif_preview(upload_id: str):
 
 
 @router.get("/preview/{upload_id}/scaled")
-async def get_gif_preview_scaled(upload_id: str, scale: int = 16):
+async def get_gif_preview_scaled(
+    upload_id: str,
+    scale: int = Query(default=16, ge=1, le=32)
+):
     """
     Retorna o GIF escalado para melhor visualização.
 
@@ -304,7 +307,10 @@ async def download_gif(upload_id: str):
     Download do GIF processado (64x64).
 
     Permite ao usuário salvar o GIF convertido em seu computador.
+
+    Rate limited: 10 requisições por minuto.
     """
+    check_rate_limit(upload_limiter)
     upload_info = gif_uploads.get(upload_id)
     if upload_info is None:
         raise HTTPException(status_code=404, detail="Upload não encontrado")

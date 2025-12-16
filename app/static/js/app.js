@@ -853,7 +853,7 @@ function youtubeDownload() {
             if (!this.downloadId) return;
 
             const a = document.createElement('a');
-            a.href = `/api/youtube/download-gif/${this.downloadId}`;
+            a.href = `/api/youtube/download/${this.downloadId}`;
             a.download = `youtube_${this.downloadId}.gif`;
             document.body.appendChild(a);
             a.click();
