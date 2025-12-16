@@ -121,10 +121,10 @@ body {
 /* ============================================
    Tabs Navigation
    ============================================ */
-.tabs {
-    display: flex;
-    justify-content: flex-start;
-    gap: 0.5rem;
+nav.tabs {
+    display: flex !important;
+    justify-content: flex-start !important;
+    gap: 0.5rem !important;
     margin-bottom: 1.5rem;
     border-bottom: 2px solid var(--border-color);
     padding-bottom: 0;
@@ -245,13 +245,15 @@ body {
 
 /* Preview escalado - mostra GIF ampliado para visualização */
 .gif-preview-scaled {
-    width: 256px;
-    height: 256px;
+    width: 512px;
+    height: 512px;
+    max-width: 100%;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     border-radius: 0.5rem;
     border: 2px solid var(--border-color);
     background: #000;
+    object-fit: contain;
 }
 
 .file-info {

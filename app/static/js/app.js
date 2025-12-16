@@ -535,7 +535,7 @@ function mediaUpload() {
             if (this.startTime >= this.endTime) {
                 this.startTime = Math.max(0, this.endTime - 0.1);
             }
-            this.startTimeStr = this.formatTime(this.startTime);
+            this.startTimeStr = utils.formatTime(this.startTime);
         },
 
         updateEndTime() {
@@ -543,7 +543,7 @@ function mediaUpload() {
             if (this.endTime <= this.startTime) {
                 this.endTime = Math.min(this.videoDuration, this.startTime + 0.1);
             }
-            this.endTimeStr = this.formatTime(this.endTime);
+            this.endTimeStr = utils.formatTime(this.endTime);
         },
 
         parseStartTime() {
