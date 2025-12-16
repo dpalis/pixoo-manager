@@ -11,8 +11,8 @@ Endpoints:
 import uuid
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION
@@ -160,6 +160,22 @@ async def download_video(request: DownloadRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no download: {e}")
+
+
+@router.head("/preview/{download_id}")
+async def head_preview(download_id: str):
+    """Verifica se preview existe (para validacao de estado)."""
+    download = youtube_downloads.get(download_id)
+    if download is None:
+        raise HTTPException(status_code=404, detail="Download nao encontrado")
+
+    path = download["path"]
+
+    if not path.exists():
+        youtube_downloads.delete(download_id)
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+
+    return Response(status_code=200)
 
 
 @router.get("/preview/{download_id}")
