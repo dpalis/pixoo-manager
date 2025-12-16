@@ -8,6 +8,9 @@
     <!-- Pico.css - Estilizacao -->
     <link rel="stylesheet" href="/static/vendor/pico.min.css">
 
+    <!-- Cropper.js - Recorte de imagens -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+
     <!-- Estilos customizados -->
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
@@ -80,7 +83,7 @@
                     @dragleave.prevent="dragOver = false"
                     @drop.prevent="handleDrop($event)"
                     @click="$refs.mediaInput.click()"
-                    x-show="!hasFile"
+                    x-show="!hasFile && !originalImageUrl"
                 >
                     <input
                         type="file"
@@ -110,8 +113,29 @@
                     </div>
                 </template>
 
-                <!-- Preview de imagem -->
-                <template x-if="mediaType === 'image' && previewUrl">
+                <!-- Cropper para imagem (antes de converter) -->
+                <template x-if="mediaType === 'image' && !cropApplied">
+                    <div class="crop-editor">
+                        <div class="crop-container">
+                            <img x-ref="cropImage" :src="originalImageUrl" alt="Imagem para recorte" class="crop-source">
+                        </div>
+                        <div class="crop-preview-section">
+                            <h4>Preview 64x64</h4>
+                            <div class="pixoo-preview-box">
+                                <canvas x-ref="cropPreviewCanvas" width="64" height="64" class="pixoo-preview-img"></canvas>
+                            </div>
+                        </div>
+                        <div class="crop-actions">
+                            <button @click="applyCrop()" class="primary" :disabled="cropApplying">
+                                <span x-show="!cropApplying">Aplicar Recorte</span>
+                                <span x-show="cropApplying">Processando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Preview de imagem (apos crop) -->
+                <template x-if="mediaType === 'image' && cropApplied && previewUrl">
                     <div class="preview-container">
                         <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
                         <div class="file-info">
@@ -253,6 +277,7 @@
                             <h3 x-text="videoInfo.title"></h3>
                             <p class="channel" x-text="videoInfo.channel"></p>
                             <p class="duration">Duracao: <span x-text="formatDuration(videoInfo.duration)"></span></p>
+                            <span x-show="videoInfo.is_shorts" class="shorts-badge">Shorts</span>
                         </div>
                         <button class="clear-btn" @click="clearVideo()">X</button>
                     </div>
@@ -272,7 +297,7 @@
                             </label>
                             <span class="duration-label" :class="{ 'error': segmentTooLong }">
                                 Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
-                                <span x-show="segmentTooLong">(max 10s)</span>
+                                <span x-show="segmentTooLong">(max <span x-text="maxDuration"></span>s)</span>
                             </span>
                         </div>
 
@@ -351,6 +376,9 @@
             {% endif %}
         </section>
     </main>
+
+    <!-- Cropper.js - Recorte de imagens -->
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 
     <!-- Alpine.js - Interatividade -->
     <script src="/static/vendor/alpine.min.js" defer></script>

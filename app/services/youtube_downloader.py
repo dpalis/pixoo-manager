@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from app.config import MAX_VIDEO_DURATION, TEMP_DIR, YTDLP_PATH
+from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, YTDLP_PATH
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
 from app.services.video_converter import convert_video_to_gif
 from app.services.gif_converter import ConvertOptions
@@ -55,6 +55,38 @@ class YouTubeInfo:
     duration: float  # segundos
     thumbnail: str
     channel: str
+    width: int = 0
+    height: int = 0
+
+
+def is_youtube_shorts(url: str, info: dict) -> bool:
+    """
+    Detecta se o video e um YouTube Shorts.
+
+    Criterios:
+    1. URL contem /shorts/
+    2. Video vertical (altura > largura) E duracao <= 60s
+
+    Args:
+        url: URL original do video
+        info: Dict com metadados do video (duration, width, height)
+
+    Returns:
+        True se for Shorts, False caso contrario
+    """
+    # Metodo 1: URL contem /shorts/
+    if '/shorts/' in url:
+        return True
+
+    # Metodo 2: Video vertical e curto
+    duration = info.get('duration', 0)
+    width = info.get('width', 0)
+    height = info.get('height', 0)
+
+    if duration <= 60 and height > width and width > 0:
+        return True
+
+    return False
 
 
 def validate_youtube_url(url: str) -> str:
@@ -118,7 +150,9 @@ def get_youtube_info(url: str) -> YouTubeInfo:
             title=info.get("title", "Sem titulo"),
             duration=float(info.get("duration", 0)),
             thumbnail=info.get("thumbnail", ""),
-            channel=info.get("channel", info.get("uploader", ""))
+            channel=info.get("channel", info.get("uploader", "")),
+            width=info.get("width", 0) or 0,
+            height=info.get("height", 0) or 0
         )
 
     except subprocess.TimeoutExpired:
@@ -162,9 +196,10 @@ def download_youtube_segment(
 
     duration = end - start
 
-    if duration > MAX_VIDEO_DURATION:
+    # Usar MAX_SHORTS_DURATION para permitir Shorts de ate 60s
+    if duration > MAX_SHORTS_DURATION:
         raise VideoTooLongError(
-            f"Trecho de {duration:.1f}s excede o limite de {MAX_VIDEO_DURATION}s"
+            f"Trecho de {duration:.1f}s excede o limite de {MAX_SHORTS_DURATION}s"
         )
 
     if duration <= 0:

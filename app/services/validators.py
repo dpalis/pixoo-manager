@@ -85,6 +85,8 @@ YOUTUBE_URL_PATTERNS = [
     re.compile(r'^https?://(?:www\.)?youtube\.com/embed/([a-zA-Z0-9_-]{11})(?:\?.*)?$'),
     # youtube.com/v/VIDEO_ID
     re.compile(r'^https?://(?:www\.)?youtube\.com/v/([a-zA-Z0-9_-]{11})(?:\?.*)?$'),
+    # youtube.com/shorts/VIDEO_ID
+    re.compile(r'^https?://(?:www\.)?youtube\.com/shorts/([a-zA-Z0-9_-]{11})(?:\?.*)?$'),
 ]
 
 

@@ -343,6 +343,11 @@ function mediaUpload() {
         sending: false,
         message: '',
         messageType: '',
+        // Crop state (para imagens)
+        originalImageUrl: null,
+        cropper: null,
+        cropApplied: false,
+        cropApplying: false,
 
         async init() {
             await this.restoreState();
@@ -367,8 +372,9 @@ function mediaUpload() {
                 endTimeStr: this.endTimeStr,
                 converted: this.converted,
                 convertedPreviewUrl: this.convertedPreviewUrl,
-                convertedFrames: this.convertedFrames
-                // Não salvar: file (File object), videoUrl (blob URL), cropper
+                convertedFrames: this.convertedFrames,
+                cropApplied: this.cropApplied
+                // Não salvar: file (File object), videoUrl (blob URL), cropper, originalImageUrl
             };
             localStorage.setItem('mediaUpload', JSON.stringify(state));
         },
@@ -467,6 +473,22 @@ function mediaUpload() {
             this.file = file;
             this.fileName = file.name;
 
+            // Imagens mostram cropper primeiro (não fazem upload imediato)
+            if (isImage) {
+                this.mediaType = 'image';
+                this.originalImageUrl = URL.createObjectURL(file);
+                this.cropApplied = false;
+                this.fileInfo = file.name;
+                this.clearMessage();
+
+                // Inicializar cropper após render
+                this.$nextTick(() => {
+                    this.initCropper();
+                });
+                return;
+            }
+
+            // GIFs e videos fazem upload direto
             const formData = new FormData();
             formData.append('file', file);
 
@@ -495,13 +517,8 @@ function mediaUpload() {
                     this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
                     this.converted = true;
                     this.clearMessage();
-                } else if (data.type === 'image') {
-                    this.mediaType = 'image';
-                    this.previewUrl = data.preview_url;
-                    this.fileInfo = `${data.width}x${data.height}`;
-                    this.converted = true;
-                    this.clearMessage();
                 } else {
+                    // Video
                     this.mediaType = 'video';
                     this.videoUrl = URL.createObjectURL(file);
                     this.videoDuration = data.duration;
@@ -514,6 +531,93 @@ function mediaUpload() {
             } catch (e) {
                 console.error('Erro no upload:', e);
                 this.showMessage('Erro ao enviar arquivo', 'error');
+            }
+        },
+
+        initCropper() {
+            const image = this.$refs.cropImage;
+            if (!image || this.cropper) return;
+
+            this.cropper = new Cropper(image, {
+                aspectRatio: 1,
+                viewMode: 1,
+                autoCropArea: 0.8,
+                responsive: true,
+                crop: () => this.updateCropPreview()
+            });
+        },
+
+        updateCropPreview() {
+            if (!this.cropper) return;
+
+            const canvas = this.$refs.cropPreviewCanvas;
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const croppedCanvas = this.cropper.getCroppedCanvas({
+                width: 64,
+                height: 64
+            });
+
+            if (croppedCanvas) {
+                ctx.clearRect(0, 0, 64, 64);
+                ctx.drawImage(croppedCanvas, 0, 0, 64, 64);
+            }
+        },
+
+        async applyCrop() {
+            if (!this.cropper || this.cropApplying) return;
+
+            this.cropApplying = true;
+            this.showMessage('Processando recorte...', 'info');
+
+            try {
+                // Obter canvas com o recorte em 64x64
+                const canvas = this.cropper.getCroppedCanvas({
+                    width: 64,
+                    height: 64
+                });
+
+                // Converter para blob
+                const blob = await new Promise(resolve => {
+                    canvas.toBlob(resolve, 'image/png');
+                });
+
+                // Upload do recorte
+                const formData = new FormData();
+                formData.append('file', blob, 'cropped.png');
+
+                const response = await fetch('/api/media/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro no upload', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                this.uploadId = data.id;
+                this.previewUrl = data.preview_url;
+                this.fileInfo = '64x64 - 1 frame';
+                this.converted = true;
+                this.cropApplied = true;
+
+                // Destruir cropper
+                if (this.cropper) {
+                    this.cropper.destroy();
+                    this.cropper = null;
+                }
+
+                this.showMessage('Recorte aplicado!', 'success');
+
+            } catch (e) {
+                console.error('Erro ao aplicar recorte:', e);
+                this.showMessage('Erro ao processar recorte', 'error');
+            } finally {
+                this.cropApplying = false;
             }
         },
 
@@ -648,9 +752,21 @@ function mediaUpload() {
         },
 
         clearFile() {
+            // Limpar blob URLs
             if (this.videoUrl) {
                 URL.revokeObjectURL(this.videoUrl);
             }
+            if (this.originalImageUrl) {
+                URL.revokeObjectURL(this.originalImageUrl);
+            }
+
+            // Limpar cropper
+            if (this.cropper) {
+                this.cropper.destroy();
+                this.cropper = null;
+            }
+
+            // Reset estado
             this.file = null;
             this.uploadId = null;
             this.mediaType = null;
@@ -667,6 +783,12 @@ function mediaUpload() {
             this.converted = false;
             this.convertedPreviewUrl = null;
             this.convertedFrames = 0;
+
+            // Reset estado do crop
+            this.originalImageUrl = null;
+            this.cropApplied = false;
+            this.cropApplying = false;
+
             this.clearMessage();
             localStorage.removeItem('mediaUpload');
         },
@@ -755,8 +877,13 @@ function youtubeDownload() {
             return Math.max(0, this.endTime - this.startTime);
         },
 
+        get maxDuration() {
+            // Shorts permitem ate 60s, videos normais ate 10s
+            return this.videoInfo?.max_duration || 10;
+        },
+
         get segmentTooLong() {
-            return this.segmentDuration > 10;
+            return this.segmentDuration > this.maxDuration;
         },
 
         formatDuration(seconds) {
@@ -783,7 +910,8 @@ function youtubeDownload() {
                 }
 
                 this.videoInfo = await response.json();
-                this.endTime = Math.min(10, this.videoInfo.duration);
+                // Usar max_duration do backend (60s para Shorts, 10s para videos normais)
+                this.endTime = Math.min(this.videoInfo.max_duration, this.videoInfo.duration);
                 this.endTimeStr = utils.formatTime(this.endTime);
 
             } catch (e) {
