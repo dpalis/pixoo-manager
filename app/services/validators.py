@@ -200,6 +200,22 @@ def validate_content_type(content_type: Optional[str], allowed_types: list[str])
         raise ValidationError(f"Tipo de arquivo inválido. Tipos aceitos: {tipos}")
 
 
+def is_youtube_shorts(url: str) -> bool:
+    """
+    Detecta se a URL é de um YouTube Shorts.
+
+    Usa apenas padrão de URL para detecção confiável.
+    Evita falsos positivos de vídeos verticais normais.
+
+    Args:
+        url: URL do YouTube
+
+    Returns:
+        True se for URL de Shorts (/shorts/), False caso contrário
+    """
+    return '/shorts/' in url
+
+
 def validate_video_duration(start: float, end: float, max_duration: float) -> float:
     """
     Valida duração de um segmento de vídeo.

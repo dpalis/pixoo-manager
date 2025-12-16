@@ -417,7 +417,9 @@ function mediaUpload() {
         },
 
         get segmentTooLong() {
-            return this.segmentDuration > 10;
+            // Arredonda para 1 casa decimal para evitar erros de ponto flutuante
+            const rounded = Math.round(this.segmentDuration * 10) / 10;
+            return rounded > 10;
         },
 
         get canSend() {
@@ -431,19 +433,8 @@ function mediaUpload() {
             const files = event.dataTransfer.files;
             if (files.length > 0) {
                 // Se ja tem arquivo carregado, limpar antes de processar novo
-                if (this.hasFile) {
-                    if (this.videoUrl) {
-                        URL.revokeObjectURL(this.videoUrl);
-                    }
-                    this.file = null;
-                    this.uploadId = null;
-                    this.mediaType = null;
-                    this.previewUrl = null;
-                    this.videoUrl = null;
-                    this.converted = false;
-                    this.convertedPreviewUrl = null;
-                    this.convertedFrames = 0;
-                    this.clearMessage();
+                if (this.hasFile || this.originalImageUrl) {
+                    this.clearFile();
                 }
                 this.processFile(files[0]);
             }
@@ -538,12 +529,19 @@ function mediaUpload() {
             const image = this.$refs.cropImage;
             if (!image || this.cropper) return;
 
+            // Debounce para evitar atualizações excessivas do preview (60fps -> ~15fps)
+            let debounceTimer = null;
+            const debouncedUpdate = () => {
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => this.updateCropPreview(), 66);
+            };
+
             this.cropper = new Cropper(image, {
                 aspectRatio: 1,
                 viewMode: 1,
                 autoCropArea: 0.8,
                 responsive: true,
-                crop: () => this.updateCropPreview()
+                crop: debouncedUpdate
             });
         },
 
@@ -881,7 +879,9 @@ function youtubeDownload() {
         },
 
         get segmentTooLong() {
-            return this.segmentDuration > this.maxDuration;
+            // Arredonda para 1 casa decimal para evitar erros de ponto flutuante
+            const rounded = Math.round(this.segmentDuration * 10) / 10;
+            return rounded > this.maxDuration;
         },
 
         formatDuration(seconds) {

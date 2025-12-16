@@ -19,9 +19,9 @@ from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION
 from app.services.youtube_downloader import (
     get_youtube_info,
     download_and_convert_youtube,
-    is_youtube_shorts,
     YouTubeInfo,
 )
+from app.services.validators import is_youtube_shorts
 from app.services.pixoo_upload import upload_gif
 from app.services.pixoo_connection import get_pixoo_connection
 from app.services.exceptions import (
@@ -93,13 +93,8 @@ async def get_video_info(request: InfoRequest):
     try:
         info = get_youtube_info(request.url)
 
-        # Detectar se e YouTube Shorts
-        info_dict = {
-            "duration": info.duration,
-            "width": info.width,
-            "height": info.height
-        }
-        shorts = is_youtube_shorts(request.url, info_dict)
+        # Detectar se e YouTube Shorts (baseado apenas na URL)
+        shorts = is_youtube_shorts(request.url)
         max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
 
         # Usar proxy local para evitar CSP/CORS
@@ -131,9 +126,11 @@ async def download_video(request: DownloadRequest):
     """
     check_rate_limit(youtube_limiter)
 
-    # Validar duracao (backend permite ate 60s para suportar Shorts)
+    # Validar duracao baseado no tipo de video
+    shorts = is_youtube_shorts(request.url)
+    max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
     try:
-        validate_video_duration(request.start, request.end, MAX_SHORTS_DURATION)
+        validate_video_duration(request.start, request.end, max_duration)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

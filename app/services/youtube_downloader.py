@@ -18,6 +18,7 @@ from app.services.gif_converter import ConvertOptions
 from app.services.validators import (
     validate_youtube_url as _validate_youtube_url,
     sanitize_time_value,
+    is_youtube_shorts,
 )
 
 
@@ -57,36 +58,6 @@ class YouTubeInfo:
     channel: str
     width: int = 0
     height: int = 0
-
-
-def is_youtube_shorts(url: str, info: dict) -> bool:
-    """
-    Detecta se o video e um YouTube Shorts.
-
-    Criterios:
-    1. URL contem /shorts/
-    2. Video vertical (altura > largura) E duracao <= 60s
-
-    Args:
-        url: URL original do video
-        info: Dict com metadados do video (duration, width, height)
-
-    Returns:
-        True se for Shorts, False caso contrario
-    """
-    # Metodo 1: URL contem /shorts/
-    if '/shorts/' in url:
-        return True
-
-    # Metodo 2: Video vertical e curto
-    duration = info.get('duration', 0)
-    width = info.get('width', 0)
-    height = info.get('height', 0)
-
-    if duration <= 60 and height > width and width > 0:
-        return True
-
-    return False
 
 
 def validate_youtube_url(url: str) -> str:
@@ -184,7 +155,7 @@ def download_youtube_segment(
         Caminho do arquivo baixado
 
     Raises:
-        VideoTooLongError: Se o trecho for maior que MAX_VIDEO_DURATION
+        VideoTooLongError: Se o trecho for maior que o limite permitido
         ConversionError: Se o download falhar
     """
     # Sanitiza valores de tempo para prevenir command injection
@@ -196,10 +167,12 @@ def download_youtube_segment(
 
     duration = end - start
 
-    # Usar MAX_SHORTS_DURATION para permitir Shorts de ate 60s
-    if duration > MAX_SHORTS_DURATION:
+    # Validar duração baseado no tipo de vídeo
+    shorts = is_youtube_shorts(url)
+    max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
+    if duration > max_duration:
         raise VideoTooLongError(
-            f"Trecho de {duration:.1f}s excede o limite de {MAX_SHORTS_DURATION}s"
+            f"Trecho de {duration:.1f}s excede o limite de {max_duration}s"
         )
 
     if duration <= 0:
