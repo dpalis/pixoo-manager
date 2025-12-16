@@ -1,740 +1,877 @@
-# Pixoo Manager - Plano de Implementação
+# Pixoo Manager v1.2 - Qualidade e UX
 
-> **Para Claude Code:** Este documento contém o plano completo para implementar o Pixoo Manager. Leia-o inteiramente antes de começar. Execute as fases em ordem, marcando cada item como concluído.
+## Overview
 
-## Contexto do Projeto
+A v1.2 do Pixoo Manager foca em duas áreas principais:
 
-**Objetivo:** Criar uma aplicação Mac desktop para gerenciar conteúdo no display LED Divoom Pixoo 64.
+1. **Qualidade de Conversão:** Melhorar resultados para conteúdo escuro (imagens e vídeos)
+2. **UX de Seleção:** Preview em tempo real nos sliders de tempo para vídeos
 
-**Stack técnica:**
-- Backend: FastAPI + Uvicorn
-- Frontend: Jinja2 + Alpine.js + Pico.css
-- Processamento: Pillow, MoviePy, yt-dlp
-- Empacotamento: PyInstaller
-
-**Padrão de referência:** O projeto PDFTools em `/Users/dpalis/Coding/PDFTools/` serve como modelo para a arquitetura. Consulte-o para entender os padrões de código.
+**Problema identificado pelo usuário:**
+- Imagens escuras ficam com pixelização ruim após conversão
+- Vídeos escuros geram GIFs com flickering (pixels oscilando entre frames)
+- Sliders de tempo são "às cegas" - não mostram o frame correspondente
 
 ---
 
-## Estrutura Final do Projeto
+## Problem Statement
 
-```
-Pixoo 64/                            # RAIZ DO PROJETO
-├── app/
-│   ├── __init__.py
-│   ├── main.py                      # FastAPI app + auto-open browser
-│   ├── config.py                    # Constantes e configurações
-│   │
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── connection.py            # /api/discover, /api/connect, /api/status
-│   │   ├── gif_upload.py            # /api/gif/upload, /api/gif/send
-│   │   ├── media_convert.py         # /api/media/upload, /api/media/convert
-│   │   └── youtube.py               # /api/youtube/info, /api/youtube/download
-│   │
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── pixoo_connection.py      # Descoberta de rede + estado de conexão
-│   │   ├── pixoo_upload.py          # Upload de GIF via HTTP API do Pixoo
-│   │   ├── gif_converter.py         # Conversão de imagens/GIFs para 64x64
-│   │   ├── video_processor.py       # Vídeo para GIF com MoviePy
-│   │   ├── youtube_downloader.py    # Download de YouTube com yt-dlp
-│   │   ├── file_utils.py            # Gerenciamento de arquivos temporários
-│   │   └── exceptions.py            # Exceções customizadas
-│   │
-│   ├── static/
-│   │   ├── css/
-│   │   │   └── styles.css           # Estilos customizados
-│   │   ├── js/
-│   │   │   └── app.js               # Funções JavaScript compartilhadas
-│   │   └── vendor/
-│   │       ├── alpine.min.js        # Alpine.js (copiar do PDFTools)
-│   │       └── pico.min.css         # Pico.css (copiar do PDFTools)
-│   │
-│   └── templates/
-│       ├── base.html                # Layout base com tabs e indicador de conexão
-│       ├── gif.html                 # Tab 1: Upload de GIF pronto
-│       ├── media.html               # Tab 2: Foto/Vídeo para Pixoo
-│       └── youtube.html             # Tab 3: YouTube para Pixoo
-│
-├── tests/                           # Testes automatizados
-│   ├── __init__.py
-│   ├── conftest.py                  # Fixtures compartilhadas (pytest)
-│   ├── test_gif_converter.py        # Testes de conversão de GIF
-│   ├── test_video_processor.py      # Testes de processamento de vídeo
-│   ├── test_pixoo_connection.py     # Testes de conexão (com mock)
-│   ├── test_pixoo_upload.py         # Testes de upload (com mock)
-│   ├── test_youtube_downloader.py   # Testes de download YouTube (com mock)
-│   └── fixtures/                    # Arquivos de teste
-│       ├── sample_64x64.gif         # GIF já no tamanho correto
-│       ├── sample_large.gif         # GIF que precisa conversão
-│       └── sample_image.png         # Imagem para teste
-│
-├── bin/
-│   └── ffmpeg                       # Binário FFmpeg estático para Mac (baixar)
-│
-├── build/
-│   └── pixoo_manager.spec           # Configuração do PyInstaller
-│
-├── Originais/                       # [EXISTENTE] GIFs de exemplo
-├── Processados/                     # [EXISTENTE] Saída de conversões
-├── Temp/                            # [EXISTENTE] Arquivos temporários
-├── venv/                            # [EXISTENTE] Ambiente virtual Python
-│
-├── PIXOO64_SPECS.md                 # [EXISTENTE] Especificações do hardware
-├── PLAN.md                          # Este arquivo
-├── CLAUDE.md                        # Princípios, patterns e decisões (template compounding-knowledge)
-├── requirements.txt                 # Dependências Python (atualizar)
-└── README.md                        # Documentação do usuário
-```
+### Qualidade em Conteúdo Escuro
 
----
-
-## Arquivos Existentes - Ações Necessárias
-
-| Arquivo | Ação | Detalhes |
-|---------|------|----------|
-| `convert_to_pixoo.py` | **REFATORAR** | Extrair funções de processamento de imagem para `app/services/gif_converter.py` como módulo reutilizável. Adaptar funções para aceitar objetos PIL.Image em vez de caminhos de arquivo. Após migração completa, deletar arquivo original. |
-| `upload_to_pixoo.py` | **DELETAR** | Lógica será reescrita em `app/services/pixoo_upload.py` com melhor integração ao singleton de conexão |
-| `PROJECT_STATE.md` | **DELETAR** | Obsoleto |
-| `PIXOO64_SPECS.md` | **MANTER** | Referência técnica do hardware |
-| `Originais/` | **MANTER** | Útil para testes |
-| `Processados/` | **MANTER** | Útil para testes |
-| `Temp/` | **MANTER** | Usar como pasta temporária do app |
-| `venv/` | **MANTER** | Ambiente virtual já configurado |
-
-### Detalhes da Refatoração de `convert_to_pixoo.py`
-
-O arquivo atual contém ~480 linhas com lógica mista de CLI e processamento. A refatoração vai:
-
-1. **Separar responsabilidades:**
-   - Remover toda lógica CLI (argparse, prints, main)
-   - Manter apenas funções puras de processamento de imagem
-
-2. **Funções a preservar e adaptar:**
-   ```python
-   # Funções core de processamento:
-   - load_gif_frames()           # Carrega frames de GIF
-   - adaptive_downscale()        # Redimensiona com qualidade
-   - smart_crop()                # Crop inteligente
-   - detect_edges()              # Detecção de bordas (Sobel)
-   - remove_dark_halos()         # Remove artefatos
-   - enhance_for_led_display()   # Otimiza para LED
-   - quantize_colors()           # Reduz paleta
-   ```
-
-3. **Nova interface do serviço:**
-   ```python
-   # app/services/gif_converter.py
-   class GifConverter:
-       def is_pixoo_ready(path: Path) -> bool
-       def convert_image(image: Image, options: ConvertOptions) -> Image
-       def convert_gif(path: Path, options: ConvertOptions) -> tuple[Path, GifMetadata]
-       def create_preview(path: Path, scale: int = 4) -> bytes
-   ```
-
-4. **Benefícios:**
-   - Testável unitariamente (funções puras)
-   - Reutilizável por múltiplos routers
-   - Sem dependências de I/O no core
-
----
-
-## Funcionalidades Detalhadas
-
-### Header Global: Conexão com Pixoo
-
-**UI:**
-- Indicador visual de status (bolinha verde/vermelha)
-- Texto: "Desconectado" / "Conectado a 192.168.x.x"
-- Botão "Conectar" (quando desconectado)
-- Botão "Desconectar" (quando conectado)
-
-**Fluxo de conexão:**
-1. Usuário clica "Conectar"
-2. Sistema tenta descoberta automática via mDNS/scan
-3. Se encontrar, conecta automaticamente
-4. Se não encontrar, mostra campo para IP manual
-5. Testa conexão com comando `Channel/GetIndex`
-6. Atualiza status na UI
-
-**API Endpoints:**
-- `POST /api/discover` → Busca dispositivos na rede, retorna lista de IPs
-- `POST /api/connect` → Body: `{ip: "192.168.1.x"}`, testa e conecta
-- `POST /api/disconnect` → Desconecta
-- `GET /api/status` → Retorna `{connected: bool, ip: string|null}`
-
----
-
-### Tab 1: Upload GIF
-
-**UI:**
-- Zona de drag-drop para arquivos GIF
-- Preview do GIF (escalado 4x com nearest-neighbor para visualização)
-- Informações: frames, dimensões, tamanho
-- Botão "Enviar para Pixoo" (desabilitado se não conectado)
-
-**Fluxo:**
-1. Usuário arrasta/seleciona arquivo GIF
-2. Sistema verifica se é 64x64
-   - Se sim: mostra preview direto
-   - Se não: converte automaticamente e mostra preview
-3. Usuário clica "Enviar"
-4. Sistema faz upload frame-by-frame para o Pixoo
-5. Mostra mensagem de sucesso/erro
-
-**API Endpoints:**
-- `POST /api/gif/upload` → Recebe arquivo, converte se necessário, retorna preview + metadata
-- `POST /api/gif/send` → Envia GIF atual para o Pixoo conectado
-
----
-
-### Tab 2: Foto/Vídeo
-
-**UI para Imagem:**
-- Zona de drag-drop (aceita PNG, JPG, GIF)
-- Preview da imagem original
-- Preview do resultado 64x64
-- Botão "Enviar para Pixoo"
-
-**UI para Vídeo:**
-- Zona de drag-drop (aceita MP4, MOV, WebM)
-- Player HTML5 para preview do vídeo
-- Timeline com dois handles (início/fim)
-- Campos de input para tempo manual (formato: MM:SS.ms)
-- Indicador de duração selecionada
-- Limite máximo: 10 segundos (mostrar aviso se exceder)
-- Barra de progresso durante conversão
-- Preview do GIF resultante
-- Botão "Enviar para Pixoo"
-
-**Fluxo Imagem:**
-1. Upload da imagem
-2. Conversão automática para 64x64 (single frame GIF)
-3. Preview e envio
-
-**Fluxo Vídeo:**
-1. Upload do vídeo
-2. Sistema retorna duração para configurar timeline
-3. Usuário ajusta início/fim (max 10s)
-4. Clica "Converter"
-5. Sistema processa com MoviePy (mostra progresso via SSE)
-6. Mostra preview do GIF
-7. Usuário envia para Pixoo
-
-**API Endpoints:**
-- `POST /api/media/upload` → Recebe arquivo, retorna tipo e metadados
-- `GET /api/media/info/{id}` → Retorna info do vídeo (duração, fps, dimensões)
-- `POST /api/media/convert` → Body: `{start, end}`, retorna SSE com progresso
-- `POST /api/media/send` → Envia resultado para Pixoo
-
----
-
-### Tab 3: YouTube
-
-**UI:**
-- Campo de texto para URL do YouTube
-- Botão "Buscar"
-- Área de info (após buscar): thumbnail, título, duração total
-- Timeline idêntica ao Tab 2 (início/fim)
-- Barra de progresso (download + conversão)
-- Preview do GIF resultante
-- Botão "Enviar para Pixoo"
-
-**Fluxo:**
-1. Usuário cola URL e clica "Buscar"
-2. Sistema usa yt-dlp para obter metadados (sem baixar)
-3. Mostra info e habilita timeline
-4. Usuário seleciona trecho (max 10s)
-5. Clica "Baixar e Converter"
-6. Sistema baixa apenas o trecho selecionado (`--download-sections`)
-7. Converte para GIF 64x64
-8. Mostra preview
-9. Usuário envia para Pixoo
-
-**API Endpoints:**
-- `POST /api/youtube/info` → Body: `{url}`, retorna metadados
-- `POST /api/youtube/download` → Body: `{url, start, end}`, retorna SSE com progresso
-- `POST /api/youtube/send` → Envia resultado para Pixoo
-
----
-
-## Código Existente a Reaproveitar
-
-### De `convert_to_pixoo.py` (extrair para `gif_converter.py`):
+O pipeline atual de enhancement (`enhance_for_led_display()`) usa parâmetros fixos otimizados para imagens com brilho médio:
 
 ```python
-# Funções a MANTER e adaptar:
-- load_gif_frames(gif_path)           # Carrega frames de GIF
-- adaptive_downscale(image, size)     # Redimensiona preservando qualidade
-- smart_crop(image, target_size)      # Crop inteligente mantendo aspecto
-- majority_color_block_sampling()     # Amostragem por cor majoritária
-- detect_edges()                      # Detecção de bordas (Sobel)
-- remove_dark_halos()                 # Remove artefatos de anti-aliasing
-- enhance_for_led_display()           # Otimiza para LED (contraste, saturação)
-- darken_background()                 # Escurece fundo
-- focus_on_center()                   # Efeito vinheta
-- quantize_colors()                   # Reduz paleta de cores
-
-# Função principal a REFATORAR:
-- convert_gif() → convert_to_pixoo_format(input_path, options) -> (output_path, metadata)
+# Parâmetros atuais (gif_converter.py:211-245)
+contrast=1.4      # Esmaga tons escuros
+brightness=1.05   # Compensação insuficiente
+saturation=1.3    # Fica estranho em áreas escuras
 ```
 
-### De `upload_to_pixoo.py` (reescrever em `pixoo_upload.py`):
+Para imagens escuras (brightness < 0.3), esses parâmetros **pioram** a qualidade:
+- Contraste 1.4x faz preto ficar mais preto, esmagando detalhes
+- Brilho +5% é insuficiente para compensar
+- Saturação em tons escuros produz cores não naturais
+
+### Flickering em GIFs de Vídeo
+
+O Pillow quantiza cada frame independentemente ao salvar GIFs:
 
 ```python
-# Lógica a REIMPLEMENTAR:
-- Conexão HTTP com Pixoo em http://{ip}:80/post
-- Comando Channel/GetIndex para teste de conexão
-- Comando Draw/ResetHttpGifId para limpar buffer
-- Comando Draw/SendHttpGif para enviar frames
-- Conversão de frame para base64 (64*64*3 bytes RGB)
-- Limite de 40 frames por upload (segurança)
+# Código atual (video_converter.py:241-248)
+processed_frames[0].save(
+    output_path,
+    save_all=True,
+    append_images=processed_frames[1:],
+    ...
+)
 ```
 
-### Do PDFTools (copiar padrões):
+Cada frame recebe uma paleta de 256 cores ligeiramente diferente. Em tons escuros, pequenas variações de cor são muito perceptíveis → **flickering visual**.
+
+### Seleção "às Cegas"
+
+Os sliders de tempo em vídeos locais e YouTube apenas atualizam texto formatado:
+
+```javascript
+// Código atual (app.js:633-663)
+updateStartTime() {
+    this.startTime = parseFloat(this.startTime);
+    this.startTimeStr = utils.formatTime(this.startTime);
+    // NÃO faz seek do vídeo
+}
+```
+
+O usuário não sabe qual frame está selecionando até converter o vídeo.
+
+---
+
+## Proposed Solution
+
+### Ordem de Implementação
 
 ```
-/Users/dpalis/Coding/PDFTools/
-├── app/main.py                  # Padrão FastAPI + lifespan + browser open
-├── app/config.py                # Padrão de configuração
-├── app/templates/base.html      # Padrão de layout com tabs
-├── app/templates/extract.html   # Padrão Alpine.js component
-├── app/static/css/styles.css    # Padrão de estilos
-├── app/static/vendor/           # Bibliotecas JS/CSS para copiar
-└── app/services/file_utils.py   # Padrão de manipulação de arquivos
+F3 (Imagens Escuras) → F4 (Anti-Flickering) → F1 (Slider Local) → F2 (Slider YouTube)
 ```
 
----
-
-## Fases de Implementação
-
-### Fase 1: Setup e Reorganização
-
-**Objetivo:** Criar estrutura de pastas e preparar ambiente.
-
-- [ ] 1.0 Criar `CLAUDE.md` baseado no template de `~/compounding-knowledge/templates/CLAUDE.md`:
-  - Copiar princípios universais e patterns do template
-  - Preencher seções específicas do projeto com info do PLAN.md
-  - Ao finalizar projeto, adicionar entrada em `compounding-knowledge/projects/pixoo-manager.md`
-
-- [ ] 1.1 Criar estrutura de diretórios:
-  ```
-  mkdir -p app/routers app/services app/static/css app/static/js app/static/vendor app/templates bin build
-  ```
-
-- [ ] 1.2 Copiar vendor files do PDFTools:
-  ```
-  cp /Users/dpalis/Coding/PDFTools/app/static/vendor/* app/static/vendor/
-  ```
-
-- [ ] 1.3 Criar `app/__init__.py` (arquivo vazio)
-
-- [ ] 1.4 Criar `app/config.py`:
-  ```python
-  from pathlib import Path
-
-  HOST = "127.0.0.1"
-  PORT = 8000
-
-  PIXOO_SIZE = 64
-  MAX_UPLOAD_FRAMES = 40      # Limite seguro para Pixoo
-  MAX_CONVERT_FRAMES = 92     # Limite de conversão
-  MAX_VIDEO_DURATION = 10.0   # Segundos
-  MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
-
-  BASE_DIR = Path(__file__).parent.parent
-  STATIC_DIR = Path(__file__).parent / "static"
-  TEMPLATES_DIR = Path(__file__).parent / "templates"
-  TEMP_DIR = BASE_DIR / "Temp"
-  ```
-
-- [ ] 1.5 Atualizar `requirements.txt`:
-  ```
-  # Web
-  fastapi>=0.109.0
-  uvicorn>=0.27.0
-  python-multipart>=0.0.6
-  jinja2>=3.1.0
-  aiofiles>=23.2.0
-  sse-starlette>=1.8.0
-
-  # Imagem
-  Pillow>=10.0.0
-  imageio>=2.31.0
-  numpy>=1.24.0
-
-  # Vídeo
-  moviepy>=1.0.3
-
-  # YouTube
-  yt-dlp>=2024.1.0
-
-  # Rede
-  zeroconf>=0.131.0
-  requests>=2.31.0
-
-  # Build
-  pyinstaller>=6.0.0
-
-  # Testes
-  pytest>=8.0.0
-  pytest-asyncio>=0.23.0
-  httpx>=0.27.0              # Cliente async para testar FastAPI
-  respx>=0.21.0              # Mock de requisições HTTP
-  ```
-
-- [ ] 1.6 Instalar dependências: `pip install -r requirements.txt`
-
-- [ ] 1.7 Extrair funções de `convert_to_pixoo.py` para `app/services/gif_converter.py`
-
-- [ ] 1.8 Deletar arquivos obsoletos:
-  ```
-  rm convert_to_pixoo.py upload_to_pixoo.py PROJECT_STATE.md
-  ```
-
-- [ ] 1.9 Criar `app/services/exceptions.py`:
-  ```python
-  class PixooError(Exception):
-      """Base exception for Pixoo errors."""
-      pass
-
-  class ConnectionError(PixooError):
-      """Failed to connect to Pixoo."""
-      pass
-
-  class ConversionError(PixooError):
-      """Failed to convert media."""
-      pass
-
-  class UploadError(PixooError):
-      """Failed to upload to Pixoo."""
-      pass
-  ```
-
-- [ ] 1.10 Criar `app/services/file_utils.py` (adaptar do PDFTools)
-
-- [ ] 1.11 Criar `app/main.py` (adaptar do PDFTools)
-
-- [ ] 1.12 Criar `app/templates/base.html` com estrutura de 3 tabs
-
-- [ ] 1.13 Criar `app/static/css/styles.css` (adaptar do PDFTools + novos estilos)
-
-- [ ] 1.14 Testar servidor básico: `python -m app.main`
+**Justificativa:** Resolver qualidade primeiro (F3, F4), depois UX (F1, F2). Validar melhorias de qualidade com preview básico antes de investir em YouTube IFrame API.
 
 ---
 
-### Fase 2: Serviço de Conexão
+## F1: Preview de Slider - Vídeo Local
 
-**Objetivo:** Implementar descoberta e conexão com Pixoo.
+### Arquivos
 
-- [ ] 2.1 Criar `app/services/pixoo_connection.py`:
-  - Classe singleton `PixooConnection`
-  - Método `discover()` usando zeroconf
-  - Método `scan_network()` como fallback (scan IP range)
-  - Método `connect(ip)` com teste de conexão
-  - Método `disconnect()`
-  - Método `send_command(command_dict)`
-  - Property `is_connected`
-  - Property `current_ip`
+| Arquivo | Modificação |
+|---------|-------------|
+| `app/static/js/app.js` | Adicionar seek em `updateStartTime()` e `updateEndTime()` |
 
-- [ ] 2.2 Criar `app/routers/__init__.py`
+### Implementação
 
-- [ ] 2.3 Criar `app/routers/connection.py`:
-  - `POST /api/discover`
-  - `POST /api/connect`
-  - `POST /api/disconnect`
-  - `GET /api/status`
+```javascript
+// app/static/js/app.js - função mediaUpload()
 
-- [ ] 2.4 Registrar router em `main.py`
+updateStartTime() {
+    this.startTime = parseFloat(this.startTime);
+    if (this.startTime >= this.endTime) {
+        this.startTime = Math.max(0, this.endTime - 0.1);
+    }
+    this.startTimeStr = utils.formatTime(this.startTime);
 
-- [ ] 2.5 Atualizar `base.html` com UI de conexão (Alpine.js component no header)
+    // NOVO: Seek do vídeo para posição do slider
+    if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
+        this.$refs.videoPlayer.currentTime = this.startTime;
+    }
+},
 
-- [ ] 2.6 Testar conexão (mock ou dispositivo real se disponível)
+updateEndTime() {
+    this.endTime = parseFloat(this.endTime);
+    if (this.endTime <= this.startTime) {
+        this.endTime = Math.min(this.videoDuration, this.startTime + 0.1);
+    }
+    this.endTimeStr = utils.formatTime(this.endTime);
 
----
+    // NOVO: Seek do vídeo para posição do slider
+    if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
+        this.$refs.videoPlayer.currentTime = this.endTime;
+    }
+}
+```
 
-### Fase 3: Tab Upload GIF
+### Decisões Técnicas
 
-**Objetivo:** Implementar upload e envio de GIFs prontos.
-
-- [ ] 3.1 Finalizar `app/services/gif_converter.py`:
-  - `is_pixoo_ready(path)` → verifica se já é 64x64
-  - `convert_to_pixoo_format(path, options)` → converte para 64x64
-  - `create_preview(path, scale)` → gera preview escalado
-
-- [ ] 3.2 Criar `app/services/pixoo_upload.py`:
-  - `frame_to_base64(frame)` → converte frame PIL para base64
-  - `upload_gif(path, speed, progress_callback)` → envia para Pixoo
-
-- [ ] 3.3 Criar `app/routers/gif_upload.py`:
-  - `POST /api/gif/upload`
-  - `POST /api/gif/send`
-  - `GET /api/gif/preview/{id}`
-
-- [ ] 3.4 Registrar router em `main.py`
-
-- [ ] 3.5 Criar `app/templates/gif.html`:
-  - Zona de drag-drop
-  - Preview do GIF
-  - Info (frames, tamanho)
-  - Botão enviar
-
-- [ ] 3.6 Adicionar rota GET `/gif` em `main.py`
-
-- [ ] 3.7 Testar upload e conversão de GIFs
-
----
-
-### Fase 4: Tab Foto/Vídeo
-
-**Objetivo:** Implementar conversão de fotos e vídeos.
-
-- [ ] 4.1 Criar `app/services/video_processor.py`:
-  - `get_video_info(path)` → duração, fps, dimensões
-  - `extract_frame(path, time)` → extrai frame em timestamp
-  - `video_to_gif(path, start, end, options, progress_callback)`
-  - `image_to_gif(path, options)` → imagem estática para GIF
-
-- [ ] 4.2 Criar `app/routers/media_convert.py`:
-  - `POST /api/media/upload`
-  - `GET /api/media/info/{id}`
-  - `POST /api/media/frame` → extrai frame para preview
-  - `POST /api/media/convert` → com SSE para progresso
-  - `POST /api/media/send`
-
-- [ ] 4.3 Registrar router em `main.py`
-
-- [ ] 4.4 Criar `app/templates/media.html`:
-  - Zona de upload
-  - Área de preview (imagem ou vídeo)
-  - Timeline com dual slider (para vídeo)
-  - Inputs de tempo manual
-  - Progress bar
-  - Preview do resultado
-  - Botão enviar
-
-- [ ] 4.5 Criar `app/static/js/app.js` com funções compartilhadas:
-  - `formatTime(seconds)`
-  - `formatFileSize(bytes)`
-  - Componente timeline reutilizável
-
-- [ ] 4.6 Adicionar rota GET `/media` em `main.py`
-
-- [ ] 4.7 Testar com imagens e vídeos
-
----
-
-### Fase 5: Tab YouTube
-
-**Objetivo:** Implementar download e conversão de vídeos do YouTube.
-
-- [ ] 5.1 Criar `app/services/youtube_downloader.py`:
-  - `get_video_info(url)` → título, duração, thumbnail
-  - `download_range(url, start, end, output_path, progress_callback)`
-  - Tratamento de erros (URL inválida, vídeo privado, etc.)
-
-- [ ] 5.2 Criar `app/routers/youtube.py`:
-  - `POST /api/youtube/info`
-  - `POST /api/youtube/download` → com SSE para progresso
-  - `POST /api/youtube/send`
-
-- [ ] 5.3 Registrar router em `main.py`
-
-- [ ] 5.4 Criar `app/templates/youtube.html`:
-  - Campo de URL
-  - Botão buscar
-  - Info display (thumbnail, título, duração)
-  - Timeline (reutilizar padrão do media.html)
-  - Progress bar
-  - Preview do resultado
-  - Botão enviar
-
-- [ ] 5.5 Adicionar rota GET `/youtube` em `main.py`
-
-- [ ] 5.6 Testar com URLs reais do YouTube
-
----
-
-### Fase 6: Empacotamento
-
-**Objetivo:** Criar .app distribuível para Mac.
-
-- [ ] 6.1 Baixar FFmpeg estático para Mac:
-  - Intel: https://evermeet.cx/ffmpeg/
-  - Colocar em `bin/ffmpeg`
-
-- [ ] 6.2 Criar `build/pixoo_manager.spec` para PyInstaller
-
-- [ ] 6.3 Atualizar código para detectar FFmpeg bundled:
-  ```python
-  import sys
-  if getattr(sys, 'frozen', False):
-      FFMPEG_PATH = Path(sys._MEIPASS) / 'bin' / 'ffmpeg'
-  else:
-      FFMPEG_PATH = Path(__file__).parent.parent / 'bin' / 'ffmpeg'
-  ```
-
-- [ ] 6.4 Build do .app:
-  ```
-  pyinstaller build/pixoo_manager.spec
-  ```
-
-- [ ] 6.5 Testar .app em Mac limpo (sem Python)
-
-- [ ] 6.6 Criar `README.md` com instruções de uso
-
----
-
-### Fase 7: Testes Automatizados
-
-**Objetivo:** Implementar testes unitários e de integração para documentar comportamento esperado.
-
-- [ ] 7.1 Criar estrutura de testes:
-  ```
-  mkdir -p tests/fixtures
-  touch tests/__init__.py tests/conftest.py
-  ```
-
-- [ ] 7.2 Criar `tests/conftest.py` com fixtures compartilhadas:
-  - `@pytest.fixture` para cliente FastAPI async
-  - `@pytest.fixture` para mock do Pixoo connection
-  - `@pytest.fixture` para arquivos de teste (GIFs, imagens)
-
-- [ ] 7.3 Criar `tests/fixtures/` com arquivos de teste:
-  - Gerar `sample_64x64.gif` (GIF já no tamanho correto)
-  - Gerar `sample_large.gif` (GIF 256x256 para testar conversão)
-  - Copiar `sample_image.png` de `Originais/`
-
-- [ ] 7.4 Criar `tests/test_gif_converter.py`:
-  ```python
-  # Testes:
-  - test_is_pixoo_ready_with_correct_size()
-  - test_is_pixoo_ready_with_wrong_size()
-  - test_convert_image_preserves_aspect()
-  - test_convert_gif_limits_frames()
-  - test_enhance_for_led_increases_contrast()
-  - test_quantize_colors_reduces_palette()
-  ```
-
-- [ ] 7.5 Criar `tests/test_video_processor.py`:
-  ```python
-  # Testes:
-  - test_get_video_info_returns_duration()
-  - test_video_to_gif_respects_time_range()
-  - test_video_to_gif_limits_duration()
-  - test_image_to_gif_creates_single_frame()
-  ```
-
-- [ ] 7.6 Criar `tests/test_pixoo_connection.py`:
-  ```python
-  # Testes com mock HTTP:
-  - test_connect_success()
-  - test_connect_timeout()
-  - test_discover_finds_device()
-  - test_disconnect_clears_state()
-  - test_singleton_returns_same_instance()
-  ```
-
-- [ ] 7.7 Criar `tests/test_pixoo_upload.py`:
-  ```python
-  # Testes com mock HTTP:
-  - test_frame_to_base64_correct_size()
-  - test_upload_gif_sends_all_frames()
-  - test_upload_gif_respects_frame_limit()
-  - test_upload_fails_without_connection()
-  ```
-
-- [ ] 7.8 Criar `tests/test_youtube_downloader.py`:
-  ```python
-  # Testes com mock yt-dlp:
-  - test_get_video_info_parses_correctly()
-  - test_get_video_info_handles_invalid_url()
-  - test_download_range_respects_limits()
-  ```
-
-- [ ] 7.9 Rodar testes: `pytest tests/ -v`
-
-- [ ] 7.10 Verificar cobertura: `pytest tests/ --cov=app --cov-report=term-missing`
-
----
-
-## Decisões Técnicas
-
-| Aspecto | Decisão | Justificativa |
+| Questão | Decisão | Justificativa |
 |---------|---------|---------------|
-| Estado de conexão | Singleton em memória | Simples, sem necessidade de persistência |
-| Progress updates | SSE (Server-Sent Events) | Mais simples que WebSocket para one-way |
-| Processamento vídeo | MoviePy | API Pythonica, gera GIF nativamente |
-| Download YouTube | yt-dlp | Fork ativo do youtube-dl, melhor suporte |
-| Empacotamento | PyInstaller --onedir | Inclui todas dependências, funciona em qualquer Mac |
-| CSS Framework | Pico.css | Leve, semântico, mesmo do PDFTools |
-| JS Framework | Alpine.js | Reativo sem build step, mesmo do PDFTools |
-| Framework de testes | pytest + httpx | Padrão para FastAPI, async-friendly |
-| Mocking HTTP | respx | Integra bem com httpx para mock de requisições |
+| Debounce | Não necessário inicialmente | HTML5 Video já trata seeks rápidos internamente |
+| Seek failure | Ignorar silenciosamente | `readyState >= 2` garante que vídeo está pronto |
+| Codecs não suportados | Erro existente do browser | Já tratado pelo upload |
+
+### Acceptance Criteria
+
+- [ ] Arrastar slider de início faz vídeo mostrar frame correspondente
+- [ ] Arrastar slider de fim faz vídeo mostrar frame correspondente
+- [ ] Slider só faz seek quando vídeo está carregado (`readyState >= 2`)
+- [ ] Digitação manual de tempo também faz seek (via `parseStartTime/parseEndTime`)
 
 ---
 
-## Limites e Validações
+## F2: Preview de Slider - YouTube
 
-| Limite | Valor | Onde validar |
-|--------|-------|--------------|
-| Tamanho máximo arquivo | 500MB | `file_utils.py` |
-| Frames máximo upload | 40 | `pixoo_upload.py` |
-| Frames máximo conversão | 92 | `gif_converter.py` |
-| Duração máxima vídeo | 10s | `video_processor.py`, `youtube_downloader.py` |
-| Dimensão Pixoo | 64x64 | `config.py` |
+### Arquivos
+
+| Arquivo | Modificação |
+|---------|-------------|
+| `app/templates/base.html` | Adicionar script YouTube IFrame API, container do player |
+| `app/static/js/app.js` | Inicializar player, conectar sliders, gerenciar lifecycle |
+
+### Implementação
+
+#### 1. Carregar YouTube IFrame API
+
+```html
+<!-- app/templates/base.html - antes do </body> -->
+<script>
+    // Flag global para saber quando API está pronta
+    window.youtubeApiReady = false;
+    window.onYouTubeIframeAPIReady = function() {
+        window.youtubeApiReady = true;
+        // Dispara evento para Alpine.js
+        window.dispatchEvent(new CustomEvent('youtube-api-ready'));
+    };
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+```
+
+#### 2. Container do Player
+
+```html
+<!-- app/templates/base.html - substituir thumbnail por player -->
+<template x-if="videoInfo">
+    <div class="video-preview-container">
+        <!-- Player YouTube (substituir thumbnail) -->
+        <div x-show="playerReady" id="youtube-player" class="youtube-player"></div>
+
+        <!-- Fallback: thumbnail estática -->
+        <img x-show="!playerReady && !playerError"
+             :src="videoInfo.thumbnail"
+             class="video-thumbnail"
+             alt="Thumbnail do vídeo">
+
+        <!-- Erro de embed -->
+        <div x-show="playerError" class="player-error">
+            Este vídeo não permite incorporação.
+            Selecione o trecho e baixe diretamente.
+        </div>
+    </div>
+</template>
+```
+
+#### 3. Lógica do Player
+
+```javascript
+// app/static/js/app.js - função youtubeDownload()
+
+function youtubeDownload() {
+    return {
+        // Estado existente...
+        url: '',
+        videoInfo: null,
+        startTime: 0,
+        endTime: 10,
+
+        // NOVO: Estado do player
+        player: null,
+        playerReady: false,
+        playerError: false,
+
+        async fetchInfo() {
+            // Código existente de fetch...
+            const response = await fetch('/api/youtube/info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: this.url })
+            });
+            this.videoInfo = await response.json();
+
+            // NOVO: Inicializar player após obter info
+            this.initPlayer();
+        },
+
+        initPlayer() {
+            // Aguardar API estar pronta
+            if (!window.youtubeApiReady) {
+                window.addEventListener('youtube-api-ready', () => this.initPlayer(), { once: true });
+                return;
+            }
+
+            // Destruir player anterior se existir
+            this.destroyPlayer();
+
+            // Criar novo player
+            this.player = new YT.Player('youtube-player', {
+                height: '180',
+                width: '320',
+                videoId: this.videoInfo.id,
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 0,
+                    'modestbranding': 1,
+                    'rel': 0,
+                    'mute': 1,
+                    'origin': window.location.origin
+                },
+                events: {
+                    'onReady': (e) => this.onPlayerReady(e),
+                    'onError': (e) => this.onPlayerError(e)
+                }
+            });
+        },
+
+        onPlayerReady(event) {
+            this.playerReady = true;
+            this.playerError = false;
+            // Seek para tempo inicial
+            this.player.seekTo(this.startTime, true);
+            this.player.pauseVideo();
+        },
+
+        onPlayerError(event) {
+            // Códigos 101 e 150 = embed desabilitado
+            if (event.data === 101 || event.data === 150) {
+                this.playerError = true;
+                this.playerReady = false;
+            }
+        },
+
+        updateStartTime() {
+            // Código existente de validação...
+            this.startTime = parseFloat(this.startTime);
+            if (this.startTime >= this.endTime) {
+                this.startTime = Math.max(0, this.endTime - 0.1);
+            }
+            this.startTimeStr = utils.formatTime(this.startTime);
+
+            // NOVO: Seek do player YouTube
+            if (this.player && this.playerReady) {
+                this.player.seekTo(this.startTime, true);
+                this.player.pauseVideo();
+            }
+        },
+
+        updateEndTime() {
+            // Código existente de validação...
+            this.endTime = parseFloat(this.endTime);
+            if (this.endTime <= this.startTime) {
+                this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
+            }
+            this.endTimeStr = utils.formatTime(this.endTime);
+
+            // NOVO: Seek do player YouTube
+            if (this.player && this.playerReady) {
+                this.player.seekTo(this.endTime, true);
+                this.player.pauseVideo();
+            }
+        },
+
+        destroyPlayer() {
+            if (this.player) {
+                this.player.destroy();
+                this.player = null;
+            }
+            this.playerReady = false;
+            this.playerError = false;
+        },
+
+        clearVideo() {
+            // NOVO: Destruir player ao limpar
+            this.destroyPlayer();
+
+            // Código existente de reset...
+            this.videoInfo = null;
+            this.url = '';
+            this.startTime = 0;
+            this.endTime = 10;
+            // ...
+        }
+    };
+}
+```
+
+### Decisões Técnicas
+
+| Questão | Decisão | Justificativa |
+|---------|---------|---------------|
+| Player size | 320x180 (16:9 thumbnail size) | Consistente com thumbnail atual |
+| Controls | Desabilitados (`controls: 0`) | Usuário não precisa play/pause, só seek |
+| Mute | Sim (`mute: 1`) | Evita som inesperado |
+| Embed disabled | Fallback para thumbnail + mensagem | Vídeo ainda pode ser baixado, só não preview |
+| API timeout | Não implementar | Raro, complexidade não justificada |
+| Debounce | Não necessário | YouTube API já trata internamente |
+
+### Acceptance Criteria
+
+- [ ] Player YouTube aparece após buscar info do vídeo
+- [ ] Arrastar slider de início faz player mostrar frame correspondente
+- [ ] Arrastar slider de fim faz player mostrar frame correspondente
+- [ ] Player permanece pausado após seek (não continua rodando)
+- [ ] Vídeos com embed desabilitado mostram mensagem e mantêm thumbnail
+- [ ] Player é destruído ao clicar "Limpar" ou buscar novo vídeo
+- [ ] Funciona mesmo se IFrame API demora para carregar
 
 ---
 
-## Testes Manuais (Complementares aos Automatizados)
+## F3: Qualidade em Imagens Escuras
 
-> Os testes automatizados da Fase 7 cobrem lógica de serviços e edge cases com mocks.
-> Os testes manuais abaixo validam integração real com hardware e fluxos de UI.
+### Arquivos
 
-1. **Conexão:**
-   - [ ] Descoberta automática funciona
-   - [ ] IP manual funciona
-   - [ ] Desconexão funciona
-   - [ ] Status atualiza corretamente
+| Arquivo | Modificação |
+|---------|-------------|
+| `app/services/gif_converter.py` | Adicionar `detect_brightness()`, `apply_gamma_correction()`, modificar `convert_image_pil()` |
 
-2. **Upload GIF:**
-   - [ ] GIF 64x64 envia direto
-   - [ ] GIF maior é convertido automaticamente
-   - [ ] Preview mostra corretamente
-   - [ ] Envio para Pixoo funciona
+### Implementação
 
-3. **Foto/Vídeo:**
-   - [ ] Upload de PNG funciona
-   - [ ] Upload de JPG funciona
-   - [ ] Upload de MP4 funciona
-   - [ ] Timeline permite selecionar trecho
-   - [ ] Conversão mostra progresso
-   - [ ] Preview do resultado funciona
-   - [ ] Envio para Pixoo funciona
+#### 1. Detecção de Brilho
 
-4. **YouTube:**
-   - [ ] URL válida retorna info
-   - [ ] URL inválida mostra erro
-   - [ ] Download de trecho funciona
-   - [ ] Progresso é mostrado
-   - [ ] Conversão funciona
-   - [ ] Envio para Pixoo funciona
+```python
+# app/services/gif_converter.py - nova função
 
-5. **App empacotado:**
-   - [ ] .app abre com duplo clique
-   - [ ] Navegador abre automaticamente
-   - [ ] Todas funcionalidades funcionam
-   - [ ] Funciona em Mac sem Python instalado
+def detect_brightness(image: Image.Image) -> float:
+    """
+    Detecta brilho médio da imagem usando RMS (Root Mean Square).
+
+    RMS é melhor que média simples porque considera variância.
+
+    Args:
+        image: Imagem PIL (qualquer modo)
+
+    Returns:
+        Brilho normalizado (0.0 a 1.0)
+    """
+    from PIL import ImageStat
+
+    # Converter para grayscale para cálculo de luminosidade
+    grayscale = image.convert('L')
+    stat = ImageStat.Stat(grayscale)
+
+    # RMS normalizado para 0-1
+    return stat.rms[0] / 255.0
+```
+
+#### 2. Correção Gamma
+
+```python
+# app/services/gif_converter.py - nova função
+
+def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
+    """
+    Aplica correção gamma para clarear tons escuros.
+
+    Gamma < 1.0: Clareia (0.5-0.7 para imagens escuras)
+    Gamma = 1.0: Sem mudança
+    Gamma > 1.0: Escurece
+
+    Args:
+        image: Imagem PIL em RGB
+        gamma: Fator de correção
+
+    Returns:
+        Imagem com gamma corrigido
+    """
+    # Criar lookup table para performance
+    inv_gamma = 1.0 / gamma
+    lut = [int((i / 255.0) ** inv_gamma * 255.0) for i in range(256)]
+
+    # Aplicar LUT a cada canal
+    return image.point(lut * 3)  # *3 para RGB
+```
+
+#### 3. Enhancement Adaptativo
+
+```python
+# app/services/gif_converter.py - modificar função existente
+
+def enhance_for_led_display(
+    image: Image.Image,
+    contrast: float = 1.4,
+    saturation: float = 1.3,
+    sharpness: float = 1.5,
+    auto_brightness: bool = True  # NOVO parâmetro
+) -> Image.Image:
+    """
+    Otimiza imagem para displays LED como Pixoo 64.
+
+    Se auto_brightness=True, detecta brilho e ajusta parâmetros:
+    - Imagens escuras (brightness < 0.3): gamma correction + parâmetros suaves
+    - Imagens normais: parâmetros padrão
+
+    Args:
+        image: Imagem PIL
+        contrast: Fator de contraste (ignorado se auto_brightness e imagem escura)
+        saturation: Fator de saturação
+        sharpness: Fator de nitidez
+        auto_brightness: Detectar e ajustar automaticamente
+
+    Returns:
+        Imagem otimizada para LED
+    """
+    img = image
+
+    # NOVO: Detecção e ajuste para imagens escuras
+    if auto_brightness:
+        brightness = detect_brightness(image)
+
+        if brightness < 0.3:  # Imagem escura
+            # Passo 1: Gamma correction para clarear tons escuros
+            img = apply_gamma_correction(img, gamma=0.6)
+
+            # Passo 2: Contraste mais suave (não esmagar tons)
+            contrast = 1.15
+
+            # Passo 3: Saturação reduzida (tons escuros ficam estranhos com alta saturação)
+            saturation = 1.1
+
+    # Pipeline existente com parâmetros ajustados
+    img = ImageEnhance.Contrast(img).enhance(contrast)
+    img = ImageEnhance.Color(img).enhance(saturation)
+    img = ImageEnhance.Brightness(img).enhance(1.05)
+    img = ImageEnhance.Sharpness(img).enhance(sharpness)
+
+    return img
+```
+
+#### 4. Atualizar ConvertOptions
+
+```python
+# app/services/gif_converter.py - modificar dataclass
+
+@dataclass
+class ConvertOptions:
+    """Opções de conversão para GIF."""
+    target_size: int = PIXOO_SIZE
+    max_frames: int = MAX_CONVERT_FRAMES
+    enhance: bool = True
+    led_optimize: bool = True
+    focus_center: bool = False
+    darken_bg: bool = False
+    num_colors: int = 0
+    auto_brightness: bool = True  # NOVO: Ajuste automático para imagens escuras
+```
+
+#### 5. Propagar Flag
+
+```python
+# app/services/gif_converter.py - modificar convert_image_pil()
+
+def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = None) -> Image.Image:
+    if options is None:
+        options = ConvertOptions()
+
+    # Downscale adaptativo
+    converted = adaptive_downscale(image, options.target_size)
+
+    # Melhorar contraste básico (opcional)
+    if options.enhance and not options.led_optimize:
+        converted = enhance_contrast(converted, factor=1.15)
+
+    # Otimização para LED display (MODIFICADO: passar auto_brightness)
+    if options.led_optimize:
+        converted = enhance_for_led_display(
+            converted,
+            auto_brightness=options.auto_brightness  # NOVO
+        )
+
+    # ... resto do código existente
+```
+
+### Decisões Técnicas
+
+| Questão | Decisão | Justificativa |
+|---------|---------|---------------|
+| Threshold de brilho | 0.3 (com `<`, não `<=`) | Baseado em testes - 0.3 RMS é "visivelmente escuro" |
+| Gamma para escuras | 0.6 | Clareia sem estourar - testado em imagens reais |
+| Contraste para escuras | 1.15 (vs 1.4 padrão) | Evita esmagar tons, preserva detalhes |
+| Indicador visual | Não implementar | Simplicidade - usuário vê resultado no preview |
+| Cache de brightness | Não implementar | Imagem processada uma vez só, não vale complexidade |
+
+### Acceptance Criteria
+
+- [ ] Imagens com brilho < 0.3 recebem gamma correction automático
+- [ ] Imagens com brilho >= 0.3 usam parâmetros padrão
+- [ ] `ConvertOptions.auto_brightness=False` desabilita detecção
+- [ ] Qualidade visual de imagens escuras melhora visivelmente
+- [ ] Imagens normais não são afetadas negativamente
 
 ---
 
-## Referências
+## F4: Anti-Flickering em Vídeos Escuros
 
-- **PDFTools (padrão de código):** `/Users/dpalis/Coding/PDFTools/`
-- **Specs do Pixoo 64:** `/Users/dpalis/Coding/Pixoo 64/PIXOO64_SPECS.md`
-- **API do Pixoo:** `http://{ip}:80/post` com comandos JSON
-- **Documentação yt-dlp:** https://github.com/yt-dlp/yt-dlp
-- **Documentação MoviePy:** https://zulko.github.io/moviepy/
-- **Documentação Alpine.js:** https://alpinejs.dev/
-- **Documentação Pico.css:** https://picocss.com/
+### Arquivos
+
+| Arquivo | Modificação |
+|---------|-------------|
+| `app/services/gif_converter.py` | Adicionar `create_global_palette()`, `apply_palette_to_frames()` |
+| `app/services/video_converter.py` | Usar paleta global em `convert_video_to_gif()` |
+
+### Implementação
+
+#### 1. Criar Paleta Global
+
+```python
+# app/services/gif_converter.py - nova função
+
+def create_global_palette(
+    frames: list[Image.Image],
+    num_colors: int = 256,
+    sample_rate: int = 4
+) -> Image.Image:
+    """
+    Cria paleta de cores otimizada a partir de múltiplos frames.
+
+    Combina pixels de frames amostrados para criar paleta consistente.
+    Usa median cut (rápido e bom para animações).
+
+    Args:
+        frames: Lista de frames PIL em RGB
+        num_colors: Número de cores na paleta (max 256 para GIF)
+        sample_rate: Amostrar 1 a cada N frames (para performance)
+
+    Returns:
+        Imagem quantizada com paleta otimizada (usar .palette)
+    """
+    if not frames:
+        raise ConversionError("Lista de frames vazia")
+
+    # Amostrar frames para não usar memória demais
+    sampled = frames[::sample_rate] if len(frames) > sample_rate else frames
+
+    # Combinar pixels de todos os frames amostrados
+    width, height = frames[0].size
+    combined_width = width * len(sampled)
+    combined = Image.new('RGB', (combined_width, height))
+
+    for i, frame in enumerate(sampled):
+        combined.paste(frame.convert('RGB'), (i * width, 0))
+
+    # Quantizar para obter paleta otimizada
+    palette_image = combined.quantize(
+        colors=num_colors,
+        method=Image.Quantize.MEDIANCUT  # Rápido e bom para animações
+    )
+
+    return palette_image
+```
+
+#### 2. Aplicar Paleta aos Frames
+
+```python
+# app/services/gif_converter.py - nova função
+
+def apply_palette_to_frames(
+    frames: list[Image.Image],
+    palette_image: Image.Image
+) -> list[Image.Image]:
+    """
+    Aplica mesma paleta a todos os frames para consistência.
+
+    Usa dither=0 (sem dithering) para evitar artefatos temporais.
+    Trade-off: gradientes podem ter banding, mas animação será suave.
+
+    Args:
+        frames: Lista de frames PIL
+        palette_image: Imagem quantizada com paleta (de create_global_palette)
+
+    Returns:
+        Lista de frames quantizados com paleta consistente
+    """
+    result = []
+
+    for frame in frames:
+        # Converter para RGB e aplicar paleta
+        rgb_frame = frame.convert('RGB')
+        quantized = rgb_frame.quantize(
+            palette=palette_image,
+            dither=0  # Sem dithering = consistência temporal
+        )
+        # Converter de volta para RGB para compatibilidade
+        result.append(quantized.convert('RGB'))
+
+    return result
+```
+
+#### 3. Integrar em Video Converter
+
+```python
+# app/services/video_converter.py - modificar convert_video_to_gif()
+
+def convert_video_to_gif(
+    path: Path,
+    start: float,
+    end: float,
+    options: Optional[ConvertOptions] = None,
+    progress_callback: Optional[Callable[[str, float], None]] = None
+) -> Tuple[Path, int]:
+    # ... código existente de extração e processamento de frames ...
+
+    # Após processar todos os frames:
+    if not processed_frames:
+        raise ConversionError("Nenhum frame extraido do video")
+
+    if progress_callback:
+        progress_callback("processing", 1.0)
+
+    # NOVO: Criar paleta global para consistência (anti-flickering)
+    if progress_callback:
+        progress_callback("optimizing", 0.0)
+
+    from app.services.gif_converter import create_global_palette, apply_palette_to_frames
+
+    global_palette = create_global_palette(processed_frames, num_colors=256, sample_rate=4)
+    processed_frames = apply_palette_to_frames(processed_frames, global_palette)
+
+    if progress_callback:
+        progress_callback("optimizing", 1.0)
+        progress_callback("saving", 0.0)
+
+    # Salvar com optimize=False para manter paleta consistente
+    durations = [frame_duration] * len(processed_frames)
+
+    processed_frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=processed_frames[1:],
+        duration=durations,
+        loop=0,
+        optimize=False  # IMPORTANTE: Não re-otimizar paleta
+    )
+
+    # ... resto do código existente ...
+```
+
+#### 4. Aplicar em GIF Converter também
+
+```python
+# app/services/gif_converter.py - modificar convert_gif()
+
+def convert_gif(
+    input_path: Path,
+    options: Optional[ConvertOptions] = None,
+    progress_callback: Optional[callable] = None
+) -> Tuple[Path, GifMetadata]:
+    # ... código existente de processamento de frames ...
+
+    # Após processar todos os frames:
+
+    # NOVO: Aplicar paleta global para consistência
+    if len(converted_frames) > 1:
+        global_palette = create_global_palette(converted_frames, num_colors=256, sample_rate=4)
+        converted_frames = apply_palette_to_frames(converted_frames, global_palette)
+
+    # Criar arquivo de saída
+    output_path = create_temp_output(".gif")
+
+    try:
+        # Usar Pillow ao invés de imageio para controle de paleta
+        converted_frames[0].save(
+            output_path,
+            save_all=True,
+            append_images=converted_frames[1:],
+            duration=durations,
+            loop=0,
+            optimize=False
+        )
+        # ... resto do código existente ...
+```
+
+### Decisões Técnicas
+
+| Questão | Decisão | Justificativa |
+|---------|---------|---------------|
+| Número de cores | 256 (máximo GIF) | Melhor qualidade possível |
+| Sample rate | 4 (1 a cada 4 frames) | Balança memória vs qualidade |
+| Dithering | Desabilitado (`dither=0`) | Evita flickering de dithering |
+| Aplicar a todos os vídeos | Sim, incondicionalmente | Simplicidade - não prejudica vídeos claros significativamente |
+| Fase de progresso | "optimizing" | Usuário sabe que está otimizando |
+
+### Acceptance Criteria
+
+- [ ] GIFs de vídeos escuros não apresentam flickering visível
+- [ ] Paleta é criada a partir de frames amostrados (não todos)
+- [ ] Progresso mostra fase "optimizing" durante criação de paleta
+- [ ] GIFs de vídeos claros mantêm qualidade aceitável
+- [ ] GIFs animados (upload) também usam paleta global
+- [ ] Tempo de conversão aumenta no máximo 20% (paleta + apply)
+
+---
+
+## Technical Considerations
+
+### Performance
+
+| Operação | Impacto | Mitigação |
+|----------|---------|-----------|
+| Brightness detection | ~10ms por imagem 64x64 | Negligível |
+| Gamma correction | ~5ms por imagem 64x64 | Negligível |
+| Global palette creation | ~50-100ms para 92 frames | Sample rate 4 reduz para ~23 frames |
+| Palette application | ~5ms por frame | Total ~500ms para 92 frames |
+
+### Memory
+
+| Operação | Uso | Mitigação |
+|----------|-----|-----------|
+| Combined image para paleta | 64 × 64 × 23 × 3 = ~280KB | Aceitável |
+| Frames em memória | Já existente, não muda | N/A |
+
+### Compatibilidade
+
+- **Pillow >= 10.0:** Necessário para `Image.Quantize.MEDIANCUT`
+- **YouTube IFrame API:** Requer HTTPS em produção (localhost OK)
+- **HTML5 Video:** Suportado em todos browsers modernos
+
+---
+
+## Dependencies & Risks
+
+### Dependencies
+
+| Dependência | Feature | Risco |
+|-------------|---------|-------|
+| YouTube IFrame API | F2 | API externa, pode mudar |
+| Pillow ImageStat | F3 | Já instalado |
+| Pillow quantize | F4 | Já instalado |
+
+### Risks
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|-------|---------------|---------|-----------|
+| YouTube muda API | Baixa | Alto | Fallback para thumbnail |
+| Paleta global piora vídeos coloridos | Média | Baixo | Trade-off aceitável |
+| Gamma muito agressivo | Baixa | Médio | Testado com 0.6, conservador |
+
+---
+
+## Success Metrics
+
+| Métrica | Baseline | Target |
+|---------|----------|--------|
+| Qualidade visual em imagens escuras | Ruim (feedback usuário) | Boa (sem crushing) |
+| Flickering em vídeos escuros | Presente (feedback usuário) | Ausente ou mínimo |
+| Tempo de conversão | ~2s para 5s vídeo | ~2.5s (max +25%) |
+| UX de seleção de tempo | "às cegas" | Preview em tempo real |
+
+---
+
+## Test Plan
+
+### F1: Preview Slider Local
+
+- [ ] Upload vídeo MP4 → arrastar slider início → vídeo mostra frame
+- [ ] Upload vídeo MP4 → arrastar slider fim → vídeo mostra frame
+- [ ] Arrastar slider rápido → último frame é mostrado (não acumula)
+- [ ] Digitar tempo manual → vídeo mostra frame correspondente
+
+### F2: Preview Slider YouTube
+
+- [ ] Buscar vídeo público → player aparece → arrastar slider → frame atualiza
+- [ ] Buscar vídeo com embed desabilitado → mensagem de erro + thumbnail
+- [ ] Buscar outro vídeo → player anterior é destruído
+- [ ] Clicar "Limpar" → player é destruído
+
+### F3: Imagens Escuras
+
+- [ ] Upload imagem escura (brightness < 0.3) → gamma aplicado → preview mais claro
+- [ ] Upload imagem normal → parâmetros padrão → sem mudança perceptível
+- [ ] Comparar antes/depois lado a lado
+
+### F4: Anti-Flickering
+
+- [ ] Converter vídeo escuro 5s → GIF sem flickering visível
+- [ ] Converter vídeo claro 5s → GIF com qualidade aceitável
+- [ ] Verificar que progresso mostra fase "optimizing"
+- [ ] Medir tempo de conversão (max +25%)
+
+---
+
+## References
+
+### Internal
+
+- `app/services/gif_converter.py:211-245` - enhance_for_led_display() atual
+- `app/services/video_converter.py:147-260` - convert_video_to_gif() atual
+- `app/static/js/app.js:633-663` - updateStartTime/updateEndTime atuais
+- `app/static/js/app.js:804-1055` - youtubeDownload() atual
+
+### External
+
+- [YouTube IFrame API Reference](https://developers.google.com/youtube/iframe_api_reference)
+- [Pillow ImageStat](https://pillow.readthedocs.io/en/stable/reference/ImageStat.html)
+- [Pillow Image.quantize](https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.quantize)
+- [Gamma Correction](https://en.wikipedia.org/wiki/Gamma_correction)
+
+### Research Files (generated)
+
+- `/Users/dpalis/Coding/Pixoo 64/FRAMEWORK_DOCS.md` - Documentação completa dos frameworks
+- `/Users/dpalis/Coding/Pixoo 64/RESEARCH_SUMMARY.md` - Resumo da pesquisa
+
+---
+
+## Checklist de Implementação
+
+### Fase 1: Qualidade (F3 + F4)
+
+- [ ] **F3.1:** Adicionar `detect_brightness()` em gif_converter.py
+- [ ] **F3.2:** Adicionar `apply_gamma_correction()` em gif_converter.py
+- [ ] **F3.3:** Modificar `enhance_for_led_display()` para detecção automática
+- [ ] **F3.4:** Adicionar `auto_brightness` em ConvertOptions
+- [ ] **F3.5:** Testar com imagens escuras e normais
+- [ ] **F4.1:** Adicionar `create_global_palette()` em gif_converter.py
+- [ ] **F4.2:** Adicionar `apply_palette_to_frames()` em gif_converter.py
+- [ ] **F4.3:** Integrar em `convert_video_to_gif()`
+- [ ] **F4.4:** Integrar em `convert_gif()`
+- [ ] **F4.5:** Adicionar fase "optimizing" no progress callback
+- [ ] **F4.6:** Testar com vídeos escuros e claros
+
+### Fase 2: UX (F1 + F2)
+
+- [ ] **F1.1:** Adicionar seek em `updateStartTime()` do mediaUpload
+- [ ] **F1.2:** Adicionar seek em `updateEndTime()` do mediaUpload
+- [ ] **F1.3:** Testar com diferentes formatos de vídeo
+- [ ] **F2.1:** Adicionar script YouTube IFrame API em base.html
+- [ ] **F2.2:** Adicionar container do player em base.html
+- [ ] **F2.3:** Implementar `initPlayer()` em youtubeDownload
+- [ ] **F2.4:** Implementar `destroyPlayer()` em youtubeDownload
+- [ ] **F2.5:** Conectar sliders ao player
+- [ ] **F2.6:** Adicionar tratamento de erro para embed desabilitado
+- [ ] **F2.7:** Testar com vídeos públicos e restritos
+
+---
+
+## Estimativa
+
+| Feature | Complexidade | Tempo Estimado |
+|---------|--------------|----------------|
+| F3: Imagens Escuras | Baixa-Média | 30-45 min |
+| F4: Anti-Flickering | Média | 1-2h |
+| F1: Slider Local | Baixa | 15 min |
+| F2: Slider YouTube | Média | 1-2h |
+| **Total** | | **3-5h** |
+
+**Com multiplicador 3x:** 1-2 dias úteis
