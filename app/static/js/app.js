@@ -572,11 +572,9 @@ function mediaUpload() {
             this.showMessage('Processando recorte...', 'info');
 
             try {
-                // Obter canvas com o recorte em 64x64
-                const canvas = this.cropper.getCroppedCanvas({
-                    width: 64,
-                    height: 64
-                });
+                // Obter canvas com o recorte em resolução original
+                // O servidor fará o redimensionamento para 64x64 com Pillow (melhor qualidade)
+                const canvas = this.cropper.getCroppedCanvas();
 
                 // Converter para blob
                 const blob = await new Promise(resolve => {
@@ -601,7 +599,7 @@ function mediaUpload() {
                 const data = await response.json();
                 this.uploadId = data.id;
                 this.previewUrl = data.preview_url;
-                this.fileInfo = '64x64 - 1 frame';
+                this.fileInfo = `${data.width}x${data.height}`;
                 this.converted = true;
                 this.cropApplied = true;
 
