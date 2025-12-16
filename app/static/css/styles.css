@@ -335,6 +335,60 @@ button.secondary:hover {
 }
 
 /* ============================================
+   Crop Editor (para imagens)
+   ============================================ */
+.crop-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.crop-container {
+    width: 100%;
+    max-width: 500px;
+    background: #000;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.crop-source {
+    display: block;
+    max-width: 100%;
+}
+
+.crop-preview-section {
+    text-align: center;
+}
+
+.crop-preview-section h4 {
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.crop-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+/* Ajustes do Cropper.js */
+.cropper-view-box,
+.cropper-face {
+    border-radius: 0;
+}
+
+.cropper-line {
+    background-color: var(--pixoo-blue);
+}
+
+.cropper-point {
+    background-color: var(--pixoo-blue);
+}
+
+/* ============================================
    Video Editor
    ============================================ */
 .video-editor {
@@ -577,6 +631,20 @@ button.secondary:hover {
     margin: 0;
     color: var(--text-secondary);
     font-size: 0.875rem;
+}
+
+/* Badge para YouTube Shorts */
+.shorts-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #ff0050, #ff4e00);
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .clear-btn {

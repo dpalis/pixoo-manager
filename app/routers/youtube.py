@@ -15,12 +15,13 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from app.config import MAX_VIDEO_DURATION
+from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION
 from app.services.youtube_downloader import (
     get_youtube_info,
     download_and_convert_youtube,
     YouTubeInfo,
 )
+from app.services.validators import is_youtube_shorts
 from app.services.pixoo_upload import upload_gif
 from app.services.pixoo_connection import get_pixoo_connection
 from app.services.exceptions import (
@@ -50,6 +51,7 @@ class InfoResponse(BaseModel):
     duration: float
     thumbnail: str
     channel: str
+    is_shorts: bool
     max_duration: float
 
 
@@ -85,10 +87,16 @@ async def get_video_info(request: InfoRequest):
     """
     Obtem informacoes do video do YouTube sem baixar.
 
-    Retorna titulo, duracao, thumbnail (proxy local) e canal.
+    Retorna titulo, duracao, thumbnail (proxy local), canal, e se e Shorts.
+    Para Shorts, max_duration e 60s. Para videos normais, 10s.
     """
     try:
         info = get_youtube_info(request.url)
+
+        # Detectar se e YouTube Shorts (baseado apenas na URL)
+        shorts = is_youtube_shorts(request.url)
+        max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
+
         # Usar proxy local para evitar CSP/CORS
         thumbnail_url = f"/api/youtube/thumbnail/{info.id}"
         return InfoResponse(
@@ -97,7 +105,8 @@ async def get_video_info(request: InfoRequest):
             duration=info.duration,
             thumbnail=thumbnail_url,
             channel=info.channel,
-            max_duration=MAX_VIDEO_DURATION
+            is_shorts=shorts,
+            max_duration=max_duration
         )
     except ConversionError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -110,15 +119,18 @@ async def download_video(request: DownloadRequest):
     """
     Baixa trecho do video e converte para GIF 64x64.
 
-    Limite maximo de 10 segundos por trecho.
+    Limite maximo de 60 segundos para Shorts, 10s para videos normais.
+    O frontend valida o limite apropriado baseado no tipo de video.
 
     Rate limited: 5 requisições por minuto (download + conversão).
     """
     check_rate_limit(youtube_limiter)
 
-    # Validar duracao
+    # Validar duracao baseado no tipo de video
+    shorts = is_youtube_shorts(request.url)
+    max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
     try:
-        validate_video_duration(request.start, request.end, MAX_VIDEO_DURATION)
+        validate_video_duration(request.start, request.end, max_duration)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

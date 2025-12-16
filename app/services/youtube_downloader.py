@@ -11,13 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from app.config import MAX_VIDEO_DURATION, TEMP_DIR, YTDLP_PATH
+from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, YTDLP_PATH
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
 from app.services.video_converter import convert_video_to_gif
 from app.services.gif_converter import ConvertOptions
 from app.services.validators import (
     validate_youtube_url as _validate_youtube_url,
     sanitize_time_value,
+    is_youtube_shorts,
 )
 
 
@@ -55,6 +56,8 @@ class YouTubeInfo:
     duration: float  # segundos
     thumbnail: str
     channel: str
+    width: int = 0
+    height: int = 0
 
 
 def validate_youtube_url(url: str) -> str:
@@ -118,7 +121,9 @@ def get_youtube_info(url: str) -> YouTubeInfo:
             title=info.get("title", "Sem titulo"),
             duration=float(info.get("duration", 0)),
             thumbnail=info.get("thumbnail", ""),
-            channel=info.get("channel", info.get("uploader", ""))
+            channel=info.get("channel", info.get("uploader", "")),
+            width=info.get("width", 0) or 0,
+            height=info.get("height", 0) or 0
         )
 
     except subprocess.TimeoutExpired:
@@ -150,7 +155,7 @@ def download_youtube_segment(
         Caminho do arquivo baixado
 
     Raises:
-        VideoTooLongError: Se o trecho for maior que MAX_VIDEO_DURATION
+        VideoTooLongError: Se o trecho for maior que o limite permitido
         ConversionError: Se o download falhar
     """
     # Sanitiza valores de tempo para prevenir command injection
@@ -162,9 +167,12 @@ def download_youtube_segment(
 
     duration = end - start
 
-    if duration > MAX_VIDEO_DURATION:
+    # Validar duração baseado no tipo de vídeo
+    shorts = is_youtube_shorts(url)
+    max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
+    if duration > max_duration:
         raise VideoTooLongError(
-            f"Trecho de {duration:.1f}s excede o limite de {MAX_VIDEO_DURATION}s"
+            f"Trecho de {duration:.1f}s excede o limite de {max_duration}s"
         )
 
     if duration <= 0:

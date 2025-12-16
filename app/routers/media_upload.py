@@ -56,6 +56,22 @@ class MediaUploadResponse(BaseModel):
     preview_url: str | None = None  # Preview (para imagem ja convertida)
 
 
+class CropRequest(BaseModel):
+    """Request para crop de imagem via API."""
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class CropResponse(BaseModel):
+    """Response apos crop de imagem."""
+    id: str
+    width: int
+    height: int
+    preview_url: str
+
+
 class ConvertRequest(BaseModel):
     """Request para converter video."""
     id: str
@@ -471,3 +487,131 @@ async def delete_upload(upload_id: str):
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 
     return {"success": True}
+
+
+@router.post("/crop", response_model=CropResponse)
+async def crop_image(
+    file: UploadFile = File(...),
+    x: int = 0,
+    y: int = 0,
+    width: int = 0,
+    height: int = 0
+):
+    """
+    Recorta imagem na regiao especificada e converte para 64x64.
+
+    Endpoint agent-native para recorte de imagens sem necessidade de UI.
+    Aceita coordenadas de recorte e redimensiona para Pixoo 64.
+
+    Args:
+        file: Arquivo de imagem (PNG, JPEG, GIF)
+        x: Coordenada X do canto superior esquerdo
+        y: Coordenada Y do canto superior esquerdo
+        width: Largura da regiao de recorte
+        height: Altura da regiao de recorte
+
+    Returns:
+        ID do upload e URL do preview
+
+    Rate limited: 10 requisições por minuto.
+    """
+    check_rate_limit(upload_limiter)
+
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de arquivo nao suportado: {content_type}"
+        )
+
+    # Salvar arquivo temporario
+    try:
+        temp_path = await stream_upload_to_temp(
+            file,
+            allowed_types=ALLOWED_IMAGE_TYPES,
+            max_size=MAX_FILE_SIZE
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro no upload: {e}")
+
+    upload_id = str(uuid.uuid4())[:8]
+
+    try:
+        from PIL import Image
+        from app.config import PIXOO_SIZE
+        from app.services.file_utils import create_temp_output
+
+        with Image.open(temp_path) as img:
+            img = img.convert('RGBA')
+            img_width, img_height = img.size
+
+            # Se width/height nao especificados, usar imagem inteira
+            if width <= 0 or height <= 0:
+                width = img_width
+                height = img_height
+
+            # Validar coordenadas
+            if x < 0 or y < 0:
+                raise HTTPException(status_code=400, detail="Coordenadas nao podem ser negativas")
+            if x + width > img_width or y + height > img_height:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Regiao de recorte excede dimensoes da imagem ({img_width}x{img_height})"
+                )
+
+            # Recortar
+            cropped = img.crop((x, y, x + width, y + height))
+
+            # Redimensionar para 64x64 com alta qualidade
+            resized = cropped.resize(
+                (PIXOO_SIZE, PIXOO_SIZE),
+                Image.Resampling.LANCZOS
+            )
+
+            # Converter para RGB (Pixoo nao suporta alpha)
+            if resized.mode == 'RGBA':
+                background = Image.new('RGB', resized.size, (0, 0, 0))
+                background.paste(resized, mask=resized.split()[3])
+                resized = background
+
+            # Salvar como GIF
+            output_path = create_temp_output("cropped", ".gif")
+            resized.save(output_path, format='GIF')
+
+        cleanup_files([temp_path])
+
+        # Armazenar resultado
+        metadata = GifMetadata(
+            width=PIXOO_SIZE,
+            height=PIXOO_SIZE,
+            frames=1,
+            duration_ms=0,
+            file_size=output_path.stat().st_size,
+            path=output_path
+        )
+
+        media_uploads.set(upload_id, {
+            "type": "image",
+            "path": output_path,
+            "metadata": metadata,
+            "converted": True
+        })
+
+        return CropResponse(
+            id=upload_id,
+            width=PIXOO_SIZE,
+            height=PIXOO_SIZE,
+            preview_url=f"/api/media/preview/{upload_id}"
+        )
+
+    except HTTPException:
+        cleanup_files([temp_path])
+        raise
+    except ConversionError as e:
+        cleanup_files([temp_path])
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        cleanup_files([temp_path])
+        raise HTTPException(status_code=500, detail=f"Erro ao processar: {e}")
