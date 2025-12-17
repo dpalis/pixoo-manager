@@ -34,10 +34,11 @@ DARK_IMAGE_CONTRAST = 1.15
 DARK_IMAGE_SATURATION = 1.1
 
 # Default enhancement factors for LED display
-DEFAULT_CONTRAST = 1.4
-DEFAULT_SATURATION = 1.3
-DEFAULT_SHARPNESS = 1.5
-DEFAULT_BRIGHTNESS_BOOST = 1.05
+# NOTE: These are the "moderate" defaults - adaptive detection may override
+DEFAULT_CONTRAST = 1.15
+DEFAULT_SATURATION = 1.1
+DEFAULT_SHARPNESS = 1.2
+DEFAULT_BRIGHTNESS_BOOST = 1.0
 
 # Dark halo removal parameters
 HALO_THRESHOLD = 35
@@ -52,27 +53,28 @@ BG_DARKEN_FACTOR = 0.55
 # ============================================
 
 # Contrast detection threshold (stddev of grayscale)
-# stddev >= 35 = high contrast image (clear, well-defined)
+# stddev >= 30 = high contrast image (clear, well-defined)
 # Note: Camel reference images have stddev ~38-40
-CONTRAST_HIGH_THRESHOLD = 35
+CONTRAST_HIGH_THRESHOLD = 30
 
 # Enhancement presets for bright images with HIGH contrast
-# These images already have good definition - use minimal enhancement
-# to avoid flickering from amplified inter-frame differences
+# These images already have good definition - use MINIMAL enhancement
+# to preserve quality and avoid flickering.
+# Based on analysis of Camel_FIRST.gif reference (stddev ~37.89)
 BRIGHT_HIGH_CONTRAST_PARAMS = {
-    'contrast': 1.15,
-    'saturation': 1.0,
-    'sharpness': 1.0,
+    'contrast': 1.1,      # Very gentle (was 1.15)
+    'saturation': 1.05,   # Nearly unchanged (was 1.0)
+    'sharpness': 1.2,     # Slight sharpening (was 1.0)
     'brightness_boost': 1.0,
 }
 
 # Enhancement presets for bright images with LOW contrast
 # These images need moderate enhancement to improve definition
 BRIGHT_LOW_CONTRAST_PARAMS = {
-    'contrast': 1.25,
-    'saturation': 1.15,
-    'sharpness': 1.3,
-    'brightness_boost': 1.05,
+    'contrast': 1.15,     # Moderate (was 1.25)
+    'saturation': 1.1,    # Gentle (was 1.15)
+    'sharpness': 1.25,    # Moderate (was 1.3)
+    'brightness_boost': 1.02,
 }
 
 
@@ -565,13 +567,13 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
     if options.enhance and not options.led_optimize:
         converted = enhance_contrast(converted, factor=1.15)
 
-    # Otimização para LED display (mais agressiva)
+    # Otimização para LED display (usa adaptive detection)
     if options.led_optimize:
         converted = enhance_for_led_display(
             converted,
-            contrast=1.4,
-            saturation=1.3,
-            sharpness=1.5,
+            contrast=DEFAULT_CONTRAST,
+            saturation=DEFAULT_SATURATION,
+            sharpness=DEFAULT_SHARPNESS,
             auto_brightness=options.auto_brightness
         )
 
