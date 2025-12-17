@@ -48,6 +48,24 @@
 })();
 
 // ============================================
+// Page Reload State Cleanup (runs immediately)
+// ============================================
+(function() {
+    // Check if this is a page reload (F5/refresh)
+    const navEntries = performance.getEntriesByType('navigation');
+    const isReload = navEntries.length > 0
+        ? navEntries[0].type === 'reload'
+        : (performance.navigation?.type === 1);
+
+    if (isReload) {
+        console.log('[App] Page reload detected, clearing all state');
+        // Clear all app-related localStorage keys
+        localStorage.removeItem('mediaUpload');
+        localStorage.removeItem('youtubeDownload');
+    }
+})();
+
+// ============================================
 // Utility Functions (Shared)
 // ============================================
 const utils = {
