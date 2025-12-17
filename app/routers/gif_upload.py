@@ -90,18 +90,17 @@ async def upload_gif_file(file: UploadFile = File(...)):
         needs_conversion = not is_pixoo_ready(temp_path)
 
         if needs_conversion:
-            # Determinar se é GIF animado ou imagem estática
+            # Determinar se é imagem animada (GIF ou WebP animado)
             from PIL import Image
             with Image.open(temp_path) as img:
-                is_animated_gif = (
-                    temp_path.suffix.lower() == '.gif' and
+                is_animated = (
                     hasattr(img, 'n_frames') and
                     img.n_frames > 1
                 )
 
             # Converter para 64x64 usando função apropriada
             options = ConvertOptions(led_optimize=True)
-            if is_animated_gif:
+            if is_animated:
                 output_path, metadata = convert_gif(temp_path, options)
             else:
                 # Imagens estáticas (JPEG, PNG, WebP, GIF estático)

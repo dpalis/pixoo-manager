@@ -52,8 +52,9 @@ BG_DARKEN_FACTOR = 0.55
 # ============================================
 
 # Contrast detection threshold (stddev of grayscale)
-# stddev >= 50 = high contrast image (clear, well-defined)
-CONTRAST_HIGH_THRESHOLD = 50
+# stddev >= 35 = high contrast image (clear, well-defined)
+# Note: Camel reference images have stddev ~38-40
+CONTRAST_HIGH_THRESHOLD = 35
 
 # Enhancement presets for bright images with HIGH contrast
 # These images already have good definition - use minimal enhancement

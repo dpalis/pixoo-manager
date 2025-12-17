@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 GIF_MAGIC_BYTES = b"GIF8"  # GIF87a ou GIF89a
 PNG_MAGIC_BYTES = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC_BYTES = b"\xff\xd8\xff"
+WEBP_RIFF = b"RIFF"  # WebP starts with RIFF
+WEBP_WEBP = b"WEBP"  # WebP has "WEBP" at bytes 8-11
 MP4_FTYP = b"ftyp"  # MP4 tem 'ftyp' nos bytes 4-7
 WEBM_MAGIC = b"\x1a\x45\xdf\xa3"  # WebM/Matroska
 
@@ -78,6 +80,10 @@ def validate_magic_bytes(data: bytes, content_type: str) -> bool:
     elif content_type in ("image/jpeg", "image/jpg"):
         return data.startswith(JPEG_MAGIC_BYTES)
 
+    elif content_type == "image/webp":
+        # WebP: RIFF....WEBP format
+        return data.startswith(WEBP_RIFF) and WEBP_WEBP in data[:12]
+
     elif content_type == "video/mp4":
         # MP4 tem 'ftyp' nos bytes 4-7
         return MP4_FTYP in data[:12]
@@ -100,6 +106,7 @@ def get_extension_for_type(content_type: str) -> str:
         "image/png": ".png",
         "image/jpeg": ".jpg",
         "image/jpg": ".jpg",
+        "image/webp": ".webp",
         "video/mp4": ".mp4",
         "video/webm": ".webm",
         "video/quicktime": ".mov",
