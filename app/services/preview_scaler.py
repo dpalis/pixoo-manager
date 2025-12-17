@@ -3,12 +3,16 @@ Service para escalar previews de GIF.
 
 Centraliza a logica de scaling que era duplicada em 3 routers.
 Inclui cache LRU para evitar recomputacao.
+
+Usa imageio para salvar GIFs (preserva cores melhor que PIL).
 """
 
 import io
 from functools import lru_cache
 from pathlib import Path
 
+import imageio.v3 as iio
+import numpy as np
 from PIL import Image
 
 from app.config import PREVIEW_SCALE
@@ -29,50 +33,37 @@ def _get_scaled_bytes(path_str: str, scale: int, mtime: float) -> bytes:
 
 
 def _scale_gif_impl(path: Path, scale: int) -> io.BytesIO:
-    """Implementacao interna do scaling."""
+    """Implementacao interna do scaling usando imageio."""
     scale = min(max(scale, 1), PREVIEW_SCALE)
 
     with Image.open(path) as img:
         new_size = (img.size[0] * scale, img.size[1] * scale)
         n_frames = getattr(img, 'n_frames', 1)
 
-        # GIF animado
-        if n_frames > 1:
-            # Limitar frames para evitar uso excessivo de memoria
-            frames_to_process = min(n_frames, MAX_FRAMES_FOR_SCALING)
+        # Obter duracao do primeiro frame
+        duration = img.info.get('duration', 100)
 
-            frames = []
-            durations = []
+        # Limitar frames
+        frames_to_process = min(n_frames, MAX_FRAMES_FOR_SCALING)
 
-            for frame_idx in range(frames_to_process):
-                img.seek(frame_idx)
-                frame = img.convert('RGBA')
-                scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
-                frames.append(scaled_frame)
-                durations.append(img.info.get('duration', 100))
-
-            output = io.BytesIO()
-            frames[0].save(
-                output,
-                format='GIF',
-                save_all=True,
-                append_images=frames[1:],
-                duration=durations,
-                loop=img.info.get('loop', 0),
-                disposal=2
-            )
-            output.seek(0)
-            return output
-
-        else:
-            # Imagem estatica
-            frame = img.convert('RGBA')
+        scaled_frames = []
+        for frame_idx in range(frames_to_process):
+            img.seek(frame_idx)
+            frame = img.convert('RGB')
             scaled_frame = frame.resize(new_size, Image.Resampling.NEAREST)
+            scaled_frames.append(np.array(scaled_frame))
 
-            output = io.BytesIO()
-            scaled_frame.save(output, format='GIF')
-            output.seek(0)
-            return output
+        # Salvar com imageio (preserva cores melhor)
+        output = io.BytesIO()
+        iio.imwrite(
+            output,
+            scaled_frames,
+            extension=".gif",
+            duration=duration,
+            loop=0
+        )
+        output.seek(0)
+        return output
 
 
 def scale_gif(path: Path, scale: int = 16) -> io.BytesIO:
