@@ -18,10 +18,10 @@ from app.middleware import RateLimiter, check_rate_limit
 router = APIRouter()
 
 # Thread-safe state using asyncio.Lock
-# NOTE: _enabled uses "initialization barrier" pattern:
-# - Written ONLY during sync startup via disable_auto_shutdown() (before event loop)
-# - Read ONLY during async runtime via _get_enabled() (with lock)
-# This is safe because startup completes before any async reads occur.
+# NOTE: _enabled can be modified in two ways:
+# - Sync startup: disable_auto_shutdown() (before event loop, no lock needed)
+# - Async runtime: /api/heartbeat/disable and /enable endpoints (with lock)
+# All async access (reads and writes) uses _lock for thread-safety.
 _lock = asyncio.Lock()
 _last_heartbeat: float = time.time()
 _shutdown_task: Optional[asyncio.Task] = None
@@ -125,6 +125,34 @@ async def heartbeat_status():
         "enabled": enabled,
         "timeout": INACTIVITY_TIMEOUT
     }
+
+
+@router.post("/api/heartbeat/disable")
+async def disable_shutdown():
+    """
+    Disable auto-shutdown at runtime.
+
+    Useful for agents running long tasks that need to prevent
+    the server from shutting down due to inactivity.
+    """
+    global _enabled
+    async with _lock:
+        _enabled = False
+    return {"status": "disabled", "auto_shutdown": False}
+
+
+@router.post("/api/heartbeat/enable")
+async def enable_shutdown():
+    """
+    Re-enable auto-shutdown at runtime.
+
+    Also resets the heartbeat timer to prevent immediate shutdown.
+    """
+    global _enabled, _last_heartbeat
+    async with _lock:
+        _enabled = True
+        _last_heartbeat = time.time()
+    return {"status": "enabled", "auto_shutdown": True}
 
 
 @router.post("/api/system/shutdown")
