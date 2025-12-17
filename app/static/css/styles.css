@@ -232,7 +232,11 @@ nav.tabs {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.75rem;
 }
 
 .gif-preview {
@@ -258,17 +262,26 @@ nav.tabs {
 
 .file-info {
     text-align: center;
+    margin-top: 0.25rem;
 }
 
 .file-info p {
     margin: 0.25rem 0;
     color: var(--text-secondary);
     font-size: 0.875rem;
+    line-height: 1.4;
 }
 
 .file-info p:first-child {
     color: var(--text-primary);
     font-weight: 500;
+    font-size: 0.9375rem;
+    margin-bottom: 0.125rem;
+}
+
+.file-info p:last-child {
+    font-size: 0.8125rem;
+    opacity: 0.8;
 }
 
 /* ============================================
