@@ -47,6 +47,33 @@ HALO_RADIUS = 1
 BG_DARKEN_THRESHOLD = 140
 BG_DARKEN_FACTOR = 0.55
 
+# ============================================
+# Adaptive Enhancement Detection
+# ============================================
+
+# Contrast detection threshold (stddev of grayscale)
+# stddev >= 50 = high contrast image (clear, well-defined)
+CONTRAST_HIGH_THRESHOLD = 50
+
+# Enhancement presets for bright images with HIGH contrast
+# These images already have good definition - use minimal enhancement
+# to avoid flickering from amplified inter-frame differences
+BRIGHT_HIGH_CONTRAST_PARAMS = {
+    'contrast': 1.15,
+    'saturation': 1.0,
+    'sharpness': 1.0,
+    'brightness_boost': 1.0,
+}
+
+# Enhancement presets for bright images with LOW contrast
+# These images need moderate enhancement to improve definition
+BRIGHT_LOW_CONTRAST_PARAMS = {
+    'contrast': 1.25,
+    'saturation': 1.15,
+    'sharpness': 1.3,
+    'brightness_boost': 1.05,
+}
+
 
 @dataclass
 class ConvertOptions:
@@ -239,6 +266,27 @@ def detect_brightness(image: Image.Image) -> float:
     return stat.mean[0] / 255.0
 
 
+def detect_contrast(image: Image.Image) -> float:
+    """
+    Detecta nível de contraste da imagem usando desvio padrão.
+
+    Valores típicos:
+    - < 30: Muito baixo contraste (flat, washed out)
+    - 30-50: Baixo contraste
+    - 50-80: Contraste normal
+    - > 80: Alto contraste
+
+    Args:
+        image: Imagem PIL (qualquer modo)
+
+    Returns:
+        Desvio padrão da luminosidade (0-~127 para imagens típicas)
+    """
+    grayscale = image.convert('L')
+    stat = ImageStat.Stat(grayscale)
+    return stat.stddev[0]
+
+
 def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
     """
     Aplica correção gamma para clarear tons escuros.
@@ -272,48 +320,66 @@ def enhance_for_led_display(
     """
     Otimiza imagem para displays LED como Pixoo 64.
 
-    - Aumenta contraste para separar figura do fundo
-    - Aumenta saturação para cores mais vivas no LED
-    - Aplica sharpening para definição
+    Usa detecção adaptativa para escolher parâmetros:
+    - Imagens escuras: gamma correction + enhancement moderado
+    - Imagens claras + baixo contraste: enhancement moderado
+    - Imagens claras + alto contraste: enhancement mínimo (preservar qualidade)
 
-    Se auto_brightness=True, detecta brilho e ajusta parâmetros:
-    - Imagens escuras: gamma correction + parâmetros suaves
-    - Imagens normais: parâmetros padrão
+    A detecção adaptativa evita flickering em imagens claras e bem definidas,
+    que não precisam de enhancement agressivo.
 
     Args:
         image: Imagem PIL
-        contrast: Fator de contraste (ignorado se auto_brightness e imagem escura)
-        saturation: Fator de saturação
-        sharpness: Fator de nitidez
-        auto_brightness: Detectar e ajustar automaticamente
+        contrast: Fator de contraste (usado apenas se auto_brightness=False)
+        saturation: Fator de saturação (usado apenas se auto_brightness=False)
+        sharpness: Fator de nitidez (usado apenas se auto_brightness=False)
+        auto_brightness: Detectar características e ajustar automaticamente
 
     Returns:
         Imagem otimizada para LED
     """
     img = image
+    brightness_boost = DEFAULT_BRIGHTNESS_BOOST
 
-    # Detecção e ajuste para imagens escuras
     if auto_brightness:
         brightness = detect_brightness(image)
+        image_contrast = detect_contrast(image)
 
         if brightness < DARK_IMAGE_THRESHOLD:
-            # Gamma correction para clarear tons escuros
+            # Pipeline DARK: gamma correction + moderate enhancement
             img = apply_gamma_correction(img, gamma=DARK_IMAGE_GAMMA)
-
-            # Parâmetros mais suaves para imagens escuras
             contrast = DARK_IMAGE_CONTRAST
             saturation = DARK_IMAGE_SATURATION
+            sharpness = 1.2  # Moderate sharpness for dark images
+            brightness_boost = 1.05
 
-    # 1. Contraste - separa figura do fundo
+        elif image_contrast >= CONTRAST_HIGH_THRESHOLD:
+            # Pipeline BRIGHT_HIGH_CONTRAST: minimal enhancement
+            # These images are already clear - avoid flickering
+            contrast = BRIGHT_HIGH_CONTRAST_PARAMS['contrast']
+            saturation = BRIGHT_HIGH_CONTRAST_PARAMS['saturation']
+            sharpness = BRIGHT_HIGH_CONTRAST_PARAMS['sharpness']
+            brightness_boost = BRIGHT_HIGH_CONTRAST_PARAMS['brightness_boost']
+
+        else:
+            # Pipeline BRIGHT_LOW_CONTRAST: moderate enhancement
+            # These images need some boost but not aggressive
+            contrast = BRIGHT_LOW_CONTRAST_PARAMS['contrast']
+            saturation = BRIGHT_LOW_CONTRAST_PARAMS['saturation']
+            sharpness = BRIGHT_LOW_CONTRAST_PARAMS['sharpness']
+            brightness_boost = BRIGHT_LOW_CONTRAST_PARAMS['brightness_boost']
+
+    # Apply enhancement in correct order
+    # 1. Contrast - separate figure from background
     img = ImageEnhance.Contrast(img).enhance(contrast)
 
-    # 2. Saturação - cores mais vivas
+    # 2. Saturation - more vivid colors
     img = ImageEnhance.Color(img).enhance(saturation)
 
-    # 3. Brilho leve - compensa o contraste
-    img = ImageEnhance.Brightness(img).enhance(DEFAULT_BRIGHTNESS_BOOST)
+    # 3. Brightness - compensate for contrast
+    img = ImageEnhance.Brightness(img).enhance(brightness_boost)
 
-    # 4. Sharpening - mais definição
+    # 4. Sharpening - more definition
     img = ImageEnhance.Sharpness(img).enhance(sharpness)
 
     return img
