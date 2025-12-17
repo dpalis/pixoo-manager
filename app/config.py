@@ -24,8 +24,11 @@ ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
 
 # Diretórios
 BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_DIR = Path(__file__).parent / "static"
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Para desenvolvimento, usamos caminhos relativos ao módulo
+# Para bundle (py2app), os recursos são copiados para Contents/Resources/
+_DEV_STATIC_DIR = Path(__file__).parent / "static"
+_DEV_TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 # Diretório temporário - usa temp do sistema
 import tempfile
@@ -33,18 +36,36 @@ TEMP_DIR = Path(tempfile.gettempdir()) / "pixoo_manager"
 
 
 # ============================================
-# Bundled binaries (PyInstaller support)
+# Bundled binaries (py2app/PyInstaller support)
 # ============================================
 import sys
+
+
+def get_bundle_base() -> Path:
+    """
+    Retorna o diretório base para recursos bundled.
+
+    Suporta:
+    - py2app: sys.frozen == 'macosx_app'
+    - PyInstaller: sys.frozen == True + sys._MEIPASS
+    - Desenvolvimento: BASE_DIR
+    """
+    frozen = getattr(sys, 'frozen', False)
+
+    if frozen == 'macosx_app':
+        # py2app - recursos estão em Contents/Resources/
+        return Path(sys.executable).parent.parent / "Resources"
+    elif frozen:
+        # PyInstaller
+        return Path(getattr(sys, '_MEIPASS', BASE_DIR))
+    else:
+        # Desenvolvimento
+        return BASE_DIR
 
 
 def get_bundled_path(relative_path: str) -> Path:
     """
     Retorna caminho para arquivo bundled.
-
-    Funciona tanto em desenvolvimento quanto quando empacotado com PyInstaller.
-    Em dev: usa BASE_DIR como base
-    Em frozen: usa sys._MEIPASS (diretório temporário do PyInstaller)
 
     Args:
         relative_path: Caminho relativo ao diretório base
@@ -52,20 +73,33 @@ def get_bundled_path(relative_path: str) -> Path:
     Returns:
         Path absoluto para o arquivo
     """
-    if getattr(sys, 'frozen', False):
-        # Executando como app empacotado
-        base_path = Path(sys._MEIPASS)
-    else:
-        # Executando em desenvolvimento
-        base_path = BASE_DIR
-    return base_path / relative_path
+    return get_bundle_base() / relative_path
 
 
 def is_frozen() -> bool:
-    """Retorna True se executando como app empacotado (PyInstaller)."""
-    return getattr(sys, 'frozen', False)
+    """Retorna True se executando como app empacotado."""
+    return bool(getattr(sys, 'frozen', False))
 
 
-# Caminhos para binários bundled
+# Caminhos para binários bundled (usados apenas se existirem)
 FFMPEG_PATH = get_bundled_path("bin/ffmpeg")
 YTDLP_PATH = get_bundled_path("bin/yt-dlp")
+
+
+def _get_static_dir() -> Path:
+    """Retorna diretório de arquivos estáticos."""
+    if is_frozen():
+        return get_bundle_base() / "static"
+    return _DEV_STATIC_DIR
+
+
+def _get_templates_dir() -> Path:
+    """Retorna diretório de templates."""
+    if is_frozen():
+        return get_bundle_base() / "templates"
+    return _DEV_TEMPLATES_DIR
+
+
+# Diretórios dinâmicos (avaliados na importação)
+STATIC_DIR = _get_static_dir()
+TEMPLATES_DIR = _get_templates_dir()

@@ -39,6 +39,7 @@ Processados/*.gif
 
 # Test materials (local only)
 Materiais para testes/
+Melhorias/
 
 # MCP directories
 .playwright-mcp/

@@ -152,6 +152,18 @@ app.include_router(media_router.router)
 app.include_router(youtube_router.router)
 
 
+# Favicon
+from fastapi.responses import FileResponse
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon."""
+    favicon_path = STATIC_DIR / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(favicon_path)
+    return Response(status_code=204)
+
+
 # Rotas de páginas
 
 @app.get("/")
