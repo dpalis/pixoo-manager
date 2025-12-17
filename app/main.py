@@ -7,6 +7,8 @@ O navegador abrirá automaticamente em http://127.0.0.1:8000
 
 import os
 import shutil
+import sys
+import threading
 import time
 import webbrowser
 from contextlib import asynccontextmanager
@@ -33,8 +35,14 @@ from app.middleware import CSRFMiddleware
 # Modo headless (sem abrir browser) para testes/automação
 HEADLESS = os.getenv("PIXOO_HEADLESS", "false").lower() == "true"
 
-# Disable auto-shutdown for development (can be set via env var)
-AUTO_SHUTDOWN = os.getenv("PIXOO_AUTO_SHUTDOWN", "true").lower() == "true"
+# Auto-shutdown por inatividade desabilitado por padrão
+# Justificativa: menu bar permite encerrar manualmente a qualquer momento
+# Para reabilitar: PIXOO_AUTO_SHUTDOWN=true python -m app.main
+AUTO_SHUTDOWN = os.getenv("PIXOO_AUTO_SHUTDOWN", "false").lower() == "true"
+
+# Flag interna: quando True, browser é aberto pelo __main__, não pelo lifespan
+# Isso permite que o menubar controle quando abrir o browser
+_SKIP_BROWSER_IN_LIFESPAN = False
 
 
 @asynccontextmanager
@@ -46,7 +54,8 @@ async def lifespan(app: FastAPI):
     Shutdown: Limpa arquivos temporários e desconecta do Pixoo
     """
     # Startup
-    if not HEADLESS:
+    # Abre browser apenas se não headless E não estiver sendo controlado externamente
+    if not HEADLESS and not _SKIP_BROWSER_IN_LIFESPAN:
         webbrowser.open(f"http://{HOST}:{PORT}")
 
     # Start inactivity monitor if enabled
@@ -178,7 +187,62 @@ async def youtube_page(request: Request):
     })
 
 
+def _run_server():
+    """Executa uvicorn em thread separada (para uso com menubar)."""
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+
+
+def _wait_for_server(timeout: float = 5.0) -> bool:
+    """
+    Aguarda o servidor estar pronto.
+
+    Returns:
+        True se servidor está pronto, False se timeout
+    """
+    import socket
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((HOST, PORT), timeout=0.5):
+                return True
+        except (ConnectionRefusedError, OSError):
+            time.sleep(0.1)
+    return False
+
+
 if __name__ == "__main__":
     print(f"\n  Pixoo Manager rodando em http://{HOST}:{PORT}")
-    print("  Pressione Ctrl+C para parar\n")
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+
+    # Tenta usar menu bar no macOS (não-headless)
+    if sys.platform == "darwin" and not HEADLESS:
+        try:
+            from app.menubar import run_menu_bar
+
+            # Indica que browser será aberto pelo __main__, não pelo lifespan
+            _SKIP_BROWSER_IN_LIFESPAN = True
+
+            # Servidor em daemon thread (para quando menubar fechar)
+            server_thread = threading.Thread(target=_run_server, daemon=True)
+            server_thread.start()
+
+            # Aguarda servidor estar pronto
+            if _wait_for_server():
+                # Abre browser
+                webbrowser.open(f"http://{HOST}:{PORT}")
+
+                # Menu bar na main thread (bloqueia até quit)
+                print("  Menu bar ativo. Use o ícone para encerrar.\n")
+                run_menu_bar(f"http://{HOST}:{PORT}")
+            else:
+                print("  Erro: servidor não iniciou a tempo")
+                sys.exit(1)
+
+        except ImportError:
+            # rumps não disponível, comportamento normal
+            print("  Menu bar não disponível (rumps não instalado)")
+            print("  Pressione Ctrl+C para parar\n")
+            uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    else:
+        # Não-macOS ou headless
+        print("  Pressione Ctrl+C para parar\n")
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
