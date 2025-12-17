@@ -113,7 +113,6 @@ async def heartbeat(request: Request):
     check_rate_limit(_heartbeat_limiter, client_ip)
 
     timestamp = await _update_heartbeat()
-    print(f"♥ Heartbeat received @ {timestamp:.0f}")
     return {"status": "ok", "timestamp": timestamp}
 
 
@@ -148,7 +147,6 @@ async def _check_inactivity():
 
     Shuts down the application if no heartbeat is received within timeout.
     """
-    print(f"[Monitor] Inactivity monitor started (timeout: {INACTIVITY_TIMEOUT}s)")
     while True:
         await asyncio.sleep(30)  # Check every 30 seconds
 
@@ -158,10 +156,9 @@ async def _check_inactivity():
 
         last = await _get_last_heartbeat()
         time_since = time.time() - last
-        print(f"[Monitor] Last heartbeat: {time_since:.0f}s ago")
 
         if time_since > INACTIVITY_TIMEOUT:
-            print(f"⚠️ No heartbeat for {time_since:.0f}s. Shutting down...")
+            print(f"No heartbeat for {time_since:.0f}s. Shutting down...")
             await _graceful_shutdown()
             return
 

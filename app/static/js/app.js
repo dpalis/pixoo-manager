@@ -7,8 +7,6 @@
 // Heartbeat - Keep server alive while browser is open
 // ============================================
 (function() {
-    console.log('[Heartbeat] Iniciando sistema de heartbeat');
-    let heartbeatCount = 0;
     const indicator = document.getElementById('heartbeat-indicator');
 
     function updateIndicator(success) {
@@ -22,35 +20,21 @@
     }
 
     async function sendHeartbeat() {
-        heartbeatCount++;
         try {
             const response = await fetch('/api/heartbeat', { method: 'POST' });
-            if (response.ok) {
-                console.log(`[Heartbeat] #${heartbeatCount} OK`);
-                updateIndicator(true);
-            } else {
-                console.warn(`[Heartbeat] #${heartbeatCount} Status: ${response.status}`);
-                updateIndicator(false);
-            }
-        } catch (error) {
-            console.error(`[Heartbeat] #${heartbeatCount} Erro:`, error.message);
+            updateIndicator(response.ok);
+        } catch {
             updateIndicator(false);
         }
     }
 
     // Send heartbeat every 15 seconds
-    const intervalId = setInterval(sendHeartbeat, 15000);
-    console.log('[Heartbeat] Interval configurado: 15s');
-
-    // Send initial heartbeat immediately
+    setInterval(sendHeartbeat, 15000);
     sendHeartbeat();
 
     // Also send heartbeat when page becomes visible
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            console.log('[Heartbeat] Tab visível, enviando heartbeat');
-            sendHeartbeat();
-        }
+        if (document.visibilityState === 'visible') sendHeartbeat();
     });
 })();
 
@@ -58,15 +42,11 @@
 // Session-based State Management
 // ============================================
 (function() {
-    // Obter session ID do servidor (muda quando servidor reinicia)
     const serverSessionId = document.querySelector('meta[name="server-session-id"]')?.content;
     const storedSessionId = localStorage.getItem('serverSessionId');
 
-    console.log('[App] Server session:', serverSessionId, '| Stored session:', storedSessionId);
-
     // Se session ID mudou (servidor reiniciou), limpar todo o estado
     if (serverSessionId && serverSessionId !== storedSessionId) {
-        console.log('[App] Session changed - clearing all state');
         localStorage.removeItem('mediaUpload');
         localStorage.removeItem('youtubeDownload');
         localStorage.setItem('serverSessionId', serverSessionId);
@@ -74,11 +54,7 @@
 
     // Também limpar em F5 (reload)
     const navEntries = performance.getEntriesByType('navigation');
-    const navType = navEntries.length > 0 ? navEntries[0].type : 'unknown';
-    console.log('[App] Navigation type:', navType);
-
-    if (navType === 'reload') {
-        console.log('[App] F5 detected - clearing all state');
+    if (navEntries.length > 0 && navEntries[0].type === 'reload') {
         localStorage.removeItem('mediaUpload');
         localStorage.removeItem('youtubeDownload');
     }
