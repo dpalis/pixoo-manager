@@ -1049,11 +1049,20 @@ function youtubeDownload() {
             targetEl.id = targetId;
             wrapper.appendChild(targetEl);
 
-            // Wait for YouTube IFrame API to be ready
+            // Wait for YouTube IFrame API to be ready (with timeout for offline scenarios)
             if (!window.youtubeApiReady) {
-                await new Promise(resolve => {
-                    window.addEventListener('youtube-api-ready', resolve, { once: true });
-                });
+                try {
+                    await Promise.race([
+                        new Promise(resolve => {
+                            window.addEventListener('youtube-api-ready', resolve, { once: true });
+                        }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), 5000))
+                    ]);
+                } catch (e) {
+                    console.warn('YouTube API failed to load:', e.message);
+                    this.playerError = true;
+                    return;
+                }
             }
 
             // Verify YT object exists
@@ -1095,8 +1104,10 @@ function youtubeDownload() {
                             // Seek will happen when user moves slider
                         },
                         onStateChange: (event) => {
-                            // When video starts playing, let it show one frame then pause
-                            // This allows the frame to render before we pause
+                            // When video starts playing, pause after brief delay to show frame
+                            // NOTE: 100ms delay is required because YouTube IFrame API doesn't
+                            // provide a "frame rendered" callback. Pausing immediately after
+                            // seekTo() shows a black frame. This is a known API limitation.
                             if (event.data === YT.PlayerState.PLAYING) {
                                 setTimeout(() => {
                                     if (this.player) {
