@@ -27,7 +27,7 @@ _enabled: bool = True
 _heartbeat_limiter = RateLimiter(max_requests=20, window_seconds=60)
 
 # Configuration
-HEARTBEAT_INTERVAL = 30  # Browser sends every 30s
+HEARTBEAT_INTERVAL = 20  # Browser sends every 20s
 INACTIVITY_TIMEOUT = 120  # Shutdown after 2 minutes without heartbeat
 
 
