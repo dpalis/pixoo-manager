@@ -9,6 +9,17 @@
 (function() {
     console.log('[Heartbeat] Iniciando sistema de heartbeat');
     let heartbeatCount = 0;
+    const indicator = document.getElementById('heartbeat-indicator');
+
+    function updateIndicator(success) {
+        if (!indicator) return;
+        indicator.style.opacity = '1';
+        indicator.textContent = success ? '💚' : '❌';
+        setTimeout(() => {
+            indicator.style.opacity = '0.5';
+            indicator.textContent = '💓';
+        }, 500);
+    }
 
     async function sendHeartbeat() {
         heartbeatCount++;
@@ -16,11 +27,14 @@
             const response = await fetch('/api/heartbeat', { method: 'POST' });
             if (response.ok) {
                 console.log(`[Heartbeat] #${heartbeatCount} OK`);
+                updateIndicator(true);
             } else {
                 console.warn(`[Heartbeat] #${heartbeatCount} Status: ${response.status}`);
+                updateIndicator(false);
             }
         } catch (error) {
             console.error(`[Heartbeat] #${heartbeatCount} Erro:`, error.message);
+            updateIndicator(false);
         }
     }
 
