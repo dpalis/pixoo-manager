@@ -48,45 +48,20 @@
 })();
 
 // ============================================
-// Page Reload State Cleanup (runs immediately)
+// Page Load State Cleanup (runs immediately)
 // ============================================
 (function() {
-    // Check if this is a page reload (F5/refresh)
-    const navEntries = performance.getEntriesByType('navigation');
-    const isReload = navEntries.length > 0
-        ? navEntries[0].type === 'reload'
-        : (performance.navigation?.type === 1);
-
-    if (isReload) {
-        console.log('[App] Page reload detected, clearing all state');
-        // Clear all app-related localStorage keys
-        localStorage.removeItem('mediaUpload');
-        localStorage.removeItem('youtubeDownload');
-    }
+    // Always clear state on page load
+    // State should not persist across page navigations, refreshes, or app restarts
+    console.log('[App] Page load - clearing all state');
+    localStorage.removeItem('mediaUpload');
+    localStorage.removeItem('youtubeDownload');
 })();
 
 // ============================================
 // Utility Functions (Shared)
 // ============================================
 const utils = {
-    /**
-     * Detecta se a página foi recarregada (F5/refresh).
-     * Usado para limpar estado em refresh mas manter ao trocar de aba.
-     */
-    isPageReload() {
-        // Modern API (Performance Navigation Timing Level 2)
-        const navEntries = performance.getEntriesByType('navigation');
-        if (navEntries.length > 0) {
-            const navType = navEntries[0].type;
-            console.log('[Utils] Navigation type:', navType);
-            return navType === 'reload';
-        }
-        // Fallback for older browsers (deprecated but still works)
-        const legacyType = performance.navigation?.type;
-        console.log('[Utils] Legacy navigation type:', legacyType);
-        return legacyType === 1;
-    },
-
     /**
      * Formata tempo em segundos para MM:SS.ms
      */
@@ -460,14 +435,8 @@ function mediaUpload() {
         },
 
         async restoreState() {
-            // Limpar estado em page reload (F5) para evitar confusão
-            // com arquivos temporários que podem não existir mais
-            if (utils.isPageReload()) {
-                console.log('[Media] Page reload detected, clearing state');
-                localStorage.removeItem('mediaUpload');
-                return;
-            }
-
+            // State is always cleared on page load (see top of file)
+            // This function now only validates any remaining state
             const saved = localStorage.getItem('mediaUpload');
             if (!saved) return;
 
@@ -957,14 +926,8 @@ function youtubeDownload() {
         },
 
         async restoreState() {
-            // Limpar estado em page reload (F5) para evitar confusão
-            // com arquivos temporários que podem não existir mais
-            if (utils.isPageReload()) {
-                console.log('[YouTube] Page reload detected, clearing state');
-                localStorage.removeItem('youtubeDownload');
-                return;
-            }
-
+            // State is always cleared on page load (see top of file)
+            // This function now only validates any remaining state
             const saved = localStorage.getItem('youtubeDownload');
             if (!saved) return;
 
