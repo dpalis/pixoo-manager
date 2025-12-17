@@ -1046,19 +1046,31 @@ function youtubeDownload() {
         },
 
         onPlayerReady(event) {
-            this.playerReady = true;
-            this.playerError = false;
-            // Seek para tempo inicial
-            this.player.seekTo(this.startTime, true);
-            this.player.pauseVideo();
+            // Verificar após pequeno delay se o player realmente funciona
+            // Alguns vídeos "carregam" mas não reproduzem
+            setTimeout(() => {
+                try {
+                    const state = this.player.getPlayerState();
+                    // -1 = não iniciado, 5 = video cued
+                    // Se após 1s ainda está nesses estados, assumir que funciona
+                    // (usuario pode ter pausado)
+                    this.playerReady = true;
+                    this.playerError = false;
+                    this.player.seekTo(this.startTime, true);
+                    this.player.pauseVideo();
+                } catch (e) {
+                    console.warn('[YouTube] Player não funcional:', e);
+                    this.playerError = true;
+                    this.playerReady = false;
+                }
+            }, 500);
         },
 
         onPlayerError(event) {
-            // Códigos 101 e 150 = embed desabilitado
-            if (event.data === 101 || event.data === 150) {
-                this.playerError = true;
-                this.playerReady = false;
-            }
+            // Qualquer erro do player = mostrar fallback
+            console.warn('[YouTube] Player error:', event.data);
+            this.playerError = true;
+            this.playerReady = false;
         },
 
         destroyPlayer() {
