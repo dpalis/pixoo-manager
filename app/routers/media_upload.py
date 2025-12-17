@@ -222,6 +222,7 @@ async def head_media_preview(upload_id: str):
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
+        media_uploads.delete(upload_id)
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     return Response(status_code=200)
