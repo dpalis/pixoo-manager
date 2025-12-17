@@ -891,6 +891,7 @@ function youtubeDownload() {
         playerReady: false,
         playerError: false,
         playerTimeout: null,
+        playerId: 0,  // Unique ID for each player instance
 
         async init() {
             await this.restoreState();
@@ -1032,21 +1033,21 @@ function youtubeDownload() {
             // Destroy any existing player first
             this.destroyPlayer();
 
-            // Verify target element exists
-            let targetEl = document.getElementById('youtube-player');
-            if (!targetEl) {
-                // Try to create it
-                const wrapper = document.querySelector('.youtube-player-wrapper');
-                if (wrapper) {
-                    targetEl = document.createElement('div');
-                    targetEl.id = 'youtube-player';
-                    wrapper.appendChild(targetEl);
-                } else {
-                    console.warn('YouTube player wrapper not found');
-                    this.playerError = true;
-                    return;
-                }
+            // Find wrapper and create fresh target element with unique ID
+            const wrapper = document.querySelector('.youtube-player-wrapper');
+            if (!wrapper) {
+                console.warn('YouTube player wrapper not found');
+                this.playerError = true;
+                return;
             }
+
+            // Clear wrapper and create new target with unique ID
+            wrapper.innerHTML = '';
+            this.playerId++;
+            const targetId = `youtube-player-${this.playerId}`;
+            const targetEl = document.createElement('div');
+            targetEl.id = targetId;
+            wrapper.appendChild(targetEl);
 
             // Wait for YouTube IFrame API to be ready
             if (!window.youtubeApiReady) {
@@ -1072,7 +1073,7 @@ function youtubeDownload() {
                     }
                 }, 8000);
 
-                this.player = new YT.Player('youtube-player', {
+                this.player = new YT.Player(targetId, {
                     videoId: videoId,
                     playerVars: {
                         controls: 0,      // Hide controls

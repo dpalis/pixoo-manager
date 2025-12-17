@@ -284,7 +284,7 @@
                             >
                             <!-- Player YouTube (overlay, loads in background) -->
                             <div class="youtube-player-wrapper" :class="{ 'visible': playerReady }">
-                                <div id="youtube-player"></div>
+                                <!-- Target div created dynamically by initPlayer() -->
                             </div>
                             <!-- Mensagem de erro se embed não disponível -->
                             <div x-show="playerError" class="player-error-badge">
