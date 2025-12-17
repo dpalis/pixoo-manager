@@ -275,8 +275,10 @@
                     <div class="video-info-card">
                         <!-- Player embed do YouTube ou thumbnail como fallback -->
                         <div class="youtube-player-container">
-                            <!-- Player YouTube (quando pronto) -->
-                            <div x-show="playerReady" id="youtube-player" class="youtube-player"></div>
+                            <!-- Player YouTube wrapper (x-show no wrapper, não no player) -->
+                            <div x-show="playerReady" class="youtube-player-wrapper">
+                                <div id="youtube-player"></div>
+                            </div>
                             <!-- Fallback: thumbnail enquanto carrega ou se embed falhar -->
                             <img
                                 x-show="!playerReady"

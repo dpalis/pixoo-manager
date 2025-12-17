@@ -615,9 +615,17 @@ button.secondary:hover {
     position: relative;
 }
 
-.youtube-player {
+.youtube-player-wrapper {
     width: 320px;
     height: 180px;
+    border-radius: 0.25rem;
+    overflow: hidden;
+}
+
+.youtube-player-wrapper iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
     border-radius: 0.25rem;
 }
 
