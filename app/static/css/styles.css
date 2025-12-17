@@ -613,13 +613,26 @@ button.secondary:hover {
 .youtube-player-container {
     flex-shrink: 0;
     position: relative;
+    width: 320px;
+    height: 180px;
 }
 
 .youtube-player-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 320px;
     height: 180px;
     border-radius: 0.25rem;
     overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.youtube-player-wrapper.visible {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .youtube-player-wrapper iframe {

@@ -1054,6 +1054,14 @@ function youtubeDownload() {
 
             // Create player
             try {
+                // Timeout: if video doesn't load in 8s, show error
+                const timeout = setTimeout(() => {
+                    if (!this.playerReady) {
+                        console.warn('YouTube player timeout - video not loading');
+                        this.playerError = true;
+                    }
+                }, 8000);
+
                 this.player = new YT.Player('youtube-player', {
                     videoId: videoId,
                     playerVars: {
@@ -1062,17 +1070,29 @@ function youtubeDownload() {
                         modestbranding: 1,
                         rel: 0,           // No related videos
                         mute: 1,          // Muted for autoplay
-                        playsinline: 1    // iOS inline playback
+                        playsinline: 1,   // iOS inline playback
+                        autoplay: 1       // Start loading immediately
                     },
                     events: {
                         onReady: () => {
-                            this.playerReady = true;
-                            this.player.seekTo(this.startTime, true);
-                            this.player.pauseVideo();
+                            // Player API ready, but video might still be loading
+                            // Start playback to trigger video loading
+                            this.player.playVideo();
+                        },
+                        onStateChange: (event) => {
+                            // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+                            if (event.data === YT.PlayerState.PLAYING) {
+                                // Video is actually playing - now we can seek
+                                clearTimeout(timeout);
+                                this.playerReady = true;
+                                this.player.seekTo(this.startTime, true);
+                                this.player.pauseVideo();
+                            }
                         },
                         onError: (e) => {
                             // Error codes: 2 = invalid param, 5 = HTML5 error,
                             // 100 = not found, 101/150 = embed disabled
+                            clearTimeout(timeout);
                             console.warn('YouTube player error:', e.data);
                             this.playerError = true;
                         }

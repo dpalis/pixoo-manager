@@ -275,17 +275,17 @@
                     <div class="video-info-card">
                         <!-- Player embed do YouTube ou thumbnail como fallback -->
                         <div class="youtube-player-container">
-                            <!-- Player YouTube wrapper (x-show no wrapper, não no player) -->
-                            <div x-show="playerReady" class="youtube-player-wrapper">
-                                <div id="youtube-player"></div>
-                            </div>
-                            <!-- Fallback: thumbnail enquanto carrega ou se embed falhar -->
+                            <!-- Thumbnail (base layer, always rendered) -->
                             <img
-                                x-show="!playerReady"
                                 :src="videoInfo.thumbnail"
                                 alt="Thumbnail"
                                 class="video-thumbnail"
+                                :class="{ 'hidden': playerReady }"
                             >
+                            <!-- Player YouTube (overlay, loads in background) -->
+                            <div class="youtube-player-wrapper" :class="{ 'visible': playerReady }">
+                                <div id="youtube-player"></div>
+                            </div>
                             <!-- Mensagem de erro se embed não disponível -->
                             <div x-show="playerError" class="player-error-badge">
                                 Preview indisponível
