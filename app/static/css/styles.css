@@ -615,20 +615,6 @@ button.secondary:hover {
     flex-shrink: 0;
 }
 
-.player-error {
-    width: 320px;
-    height: 180px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-card);
-    border: 1px dashed var(--border-color);
-    border-radius: 0.25rem;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    text-align: center;
-    padding: 1rem;
-}
 
 .video-details {
     flex: 1;

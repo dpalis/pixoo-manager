@@ -170,7 +170,9 @@ def download_youtube_segment(
     # Validar duração baseado no tipo de vídeo
     shorts = is_youtube_shorts(url)
     max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
-    if duration > max_duration:
+    # Arredondar para 1 casa decimal para evitar erros de ponto flutuante
+    rounded_duration = round(duration, 1)
+    if rounded_duration > max_duration:
         raise VideoTooLongError(
             f"Trecho de {duration:.1f}s excede o limite de {max_duration}s"
         )

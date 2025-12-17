@@ -95,7 +95,10 @@ def extract_video_segment(
     """
     duration = end - start
 
-    if duration > MAX_VIDEO_DURATION:
+    # Arredondar para 1 casa decimal para evitar erros de ponto flutuante
+    # (ex: 10.0000001 > 10.0 seria True sem arredondamento)
+    rounded_duration = round(duration, 1)
+    if rounded_duration > MAX_VIDEO_DURATION:
         raise VideoTooLongError(
             f"Segmento de {duration:.1f}s excede o limite de {MAX_VIDEO_DURATION}s"
         )
@@ -177,7 +180,10 @@ def convert_video_to_gif(
 
     duration = end - start
 
-    if duration > MAX_VIDEO_DURATION:
+    # Arredondar para 1 casa decimal para evitar erros de ponto flutuante
+    # (ex: 10.0000001 > 10.0 seria True sem arredondamento)
+    rounded_duration = round(duration, 1)
+    if rounded_duration > MAX_VIDEO_DURATION:
         raise VideoTooLongError(
             f"Segmento de {duration:.1f}s excede o limite de {MAX_VIDEO_DURATION}s"
         )

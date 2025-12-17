@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="server-session-id" content="{{ session_id }}">
     <title>Pixoo Manager</title>
 
     <!-- Pico.css - Estilizacao -->
@@ -20,6 +21,8 @@
         <header class="app-header" x-data="connectionStatus()">
             <div class="header-top">
                 <h1 class="app-title">Pixoo Manager</h1>
+                <!-- Heartbeat indicator -->
+                <span id="heartbeat-indicator" title="Heartbeat status" style="font-size: 0.7em; opacity: 0.5; margin-right: 1rem;">💓</span>
                 <div class="connection-status">
                     <span class="status-indicator" :class="connected ? 'connected' : 'disconnected'"></span>
                     <span class="status-text" x-text="statusText"></span>
@@ -272,13 +275,9 @@
                 <!-- Info do video e player -->
                 <template x-if="videoInfo">
                     <div class="video-info-card">
-                        <!-- Player YouTube (substituir thumbnail quando pronto) -->
+                        <!-- Sempre mostra thumbnail (embed do YouTube é muito instável) -->
                         <div class="youtube-player-container">
-                            <div x-show="playerReady" :id="'youtube-player-' + videoInfo.id" class="youtube-player"></div>
-                            <img x-show="!playerReady && !playerError" :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
-                            <div x-show="playerError" class="player-error">
-                                Este vídeo não permite incorporação. Selecione o trecho e baixe diretamente.
-                            </div>
+                            <img :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
                         </div>
                         <div class="video-details">
                             <h3 x-text="videoInfo.title"></h3>
@@ -402,7 +401,7 @@
     <!-- Alpine.js - Interatividade -->
     <script src="/static/vendor/alpine.min.js" defer></script>
 
-    <!-- JavaScript customizado -->
-    <script src="/static/js/app.js"></script>
+    <!-- JavaScript customizado (cache-busted) -->
+    <script src="/static/js/app.js?v={{ session_id }}"></script>
 </body>
 </html>

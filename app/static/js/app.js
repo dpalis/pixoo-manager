@@ -7,13 +7,57 @@
 // Heartbeat - Keep server alive while browser is open
 // ============================================
 (function() {
-    // Send heartbeat every 30 seconds
-    setInterval(() => {
-        fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
-    }, 30000);
+    const indicator = document.getElementById('heartbeat-indicator');
 
-    // Send initial heartbeat immediately
-    fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+    function updateIndicator(success) {
+        if (!indicator) return;
+        indicator.style.opacity = '1';
+        indicator.textContent = success ? '💚' : '❌';
+        setTimeout(() => {
+            indicator.style.opacity = '0.5';
+            indicator.textContent = '💓';
+        }, 500);
+    }
+
+    async function sendHeartbeat() {
+        try {
+            const response = await fetch('/api/heartbeat', { method: 'POST' });
+            updateIndicator(response.ok);
+        } catch {
+            updateIndicator(false);
+        }
+    }
+
+    // Send heartbeat every 15 seconds
+    setInterval(sendHeartbeat, 15000);
+    sendHeartbeat();
+
+    // Also send heartbeat when page becomes visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') sendHeartbeat();
+    });
+})();
+
+// ============================================
+// Session-based State Management
+// ============================================
+(function() {
+    const serverSessionId = document.querySelector('meta[name="server-session-id"]')?.content;
+    const storedSessionId = localStorage.getItem('serverSessionId');
+
+    // Se session ID mudou (servidor reiniciou), limpar todo o estado
+    if (serverSessionId && serverSessionId !== storedSessionId) {
+        localStorage.removeItem('mediaUpload');
+        localStorage.removeItem('youtubeDownload');
+        localStorage.setItem('serverSessionId', serverSessionId);
+    }
+
+    // Também limpar em F5 (reload)
+    const navEntries = performance.getEntriesByType('navigation');
+    if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+        localStorage.removeItem('mediaUpload');
+        localStorage.removeItem('youtubeDownload');
+    }
 })();
 
 // ============================================
@@ -393,6 +437,8 @@ function mediaUpload() {
         },
 
         async restoreState() {
+            // State is always cleared on page load (see top of file)
+            // This function now only validates any remaining state
             const saved = localStorage.getItem('mediaUpload');
             if (!saved) return;
 
@@ -853,10 +899,6 @@ function youtubeDownload() {
         sending: false,
         message: '',
         messageType: '',
-        // YouTube player state
-        player: null,
-        playerReady: false,
-        playerError: false,
 
         async init() {
             await this.restoreState();
@@ -882,6 +924,8 @@ function youtubeDownload() {
         },
 
         async restoreState() {
+            // State is always cleared on page load (see top of file)
+            // This function now only validates any remaining state
             const saved = localStorage.getItem('youtubeDownload');
             if (!saved) return;
 
@@ -949,9 +993,6 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.max_duration, this.videoInfo.duration);
                 this.endTimeStr = utils.formatTime(this.endTime);
 
-                // Inicializar player YouTube após obter info
-                this.$nextTick(() => this.initPlayer());
-
             } catch (e) {
                 console.error('Erro:', e);
                 this.showMessage('Erro ao buscar video', 'error');
@@ -960,86 +1001,12 @@ function youtubeDownload() {
             }
         },
 
-        initPlayer() {
-            // Aguardar API estar pronta
-            if (!window.youtubeApiReady) {
-                window.addEventListener('youtube-api-ready', () => this.initPlayer(), { once: true });
-                return;
-            }
-
-            // Destruir player anterior se existir
-            this.destroyPlayer();
-
-            if (!this.videoInfo) return;
-
-            const containerId = `youtube-player-${this.videoInfo.id}`;
-            const container = document.getElementById(containerId);
-            if (!container) {
-                console.warn('Container do player não encontrado:', containerId);
-                return;
-            }
-
-            // Criar novo player
-            this.player = new YT.Player(containerId, {
-                height: '180',
-                width: '320',
-                videoId: this.videoInfo.id,
-                playerVars: {
-                    'playsinline': 1,
-                    'controls': 0,
-                    'modestbranding': 1,
-                    'rel': 0,
-                    'mute': 1,
-                    'origin': window.location.origin
-                },
-                events: {
-                    'onReady': (e) => this.onPlayerReady(e),
-                    'onError': (e) => this.onPlayerError(e)
-                }
-            });
-        },
-
-        onPlayerReady(event) {
-            this.playerReady = true;
-            this.playerError = false;
-            // Seek para tempo inicial
-            this.player.seekTo(this.startTime, true);
-            this.player.pauseVideo();
-        },
-
-        onPlayerError(event) {
-            // Códigos 101 e 150 = embed desabilitado
-            if (event.data === 101 || event.data === 150) {
-                this.playerError = true;
-                this.playerReady = false;
-            }
-        },
-
-        destroyPlayer() {
-            if (this.player) {
-                try {
-                    this.player.destroy();
-                } catch (e) {
-                    console.warn('Erro ao destruir player:', e);
-                }
-                this.player = null;
-            }
-            this.playerReady = false;
-            this.playerError = false;
-        },
-
         updateStartTime() {
             this.startTime = parseFloat(this.startTime);
             if (this.startTime >= this.endTime) {
                 this.startTime = Math.max(0, this.endTime - 0.1);
             }
             this.startTimeStr = utils.formatTime(this.startTime);
-
-            // Seek do player YouTube
-            if (this.player && this.playerReady) {
-                this.player.seekTo(this.startTime, true);
-                this.player.pauseVideo();
-            }
         },
 
         updateEndTime() {
@@ -1048,12 +1015,6 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
             }
             this.endTimeStr = utils.formatTime(this.endTime);
-
-            // Seek do player YouTube
-            if (this.player && this.playerReady) {
-                this.player.seekTo(this.endTime, true);
-                this.player.pauseVideo();
-            }
         },
 
         parseStartTime() {
@@ -1061,12 +1022,6 @@ function youtubeDownload() {
             if (seconds !== null && this.videoInfo) {
                 this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
                 this.startTimeStr = utils.formatTime(this.startTime);
-
-                // Seek do player YouTube
-                if (this.player && this.playerReady) {
-                    this.player.seekTo(this.startTime, true);
-                    this.player.pauseVideo();
-                }
             }
         },
 
@@ -1075,12 +1030,6 @@ function youtubeDownload() {
             if (seconds !== null && this.videoInfo) {
                 this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoInfo.duration));
                 this.endTimeStr = utils.formatTime(this.endTime);
-
-                // Seek do player YouTube
-                if (this.player && this.playerReady) {
-                    this.player.seekTo(this.endTime, true);
-                    this.player.pauseVideo();
-                }
             }
         },
 
@@ -1162,9 +1111,6 @@ function youtubeDownload() {
         },
 
         clearVideo() {
-            // Destruir player ao limpar
-            this.destroyPlayer();
-
             this.url = '';
             this.videoInfo = null;
             this.startTime = 0;
