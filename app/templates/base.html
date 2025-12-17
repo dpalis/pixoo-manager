@@ -275,15 +275,15 @@
                     <div class="video-info-card">
                         <!-- Player embed do YouTube ou thumbnail como fallback -->
                         <div class="youtube-player-container">
-                            <!-- Thumbnail (base layer, always rendered) -->
+                            <!-- Thumbnail (mostrar quando não pronto OU quando erro) -->
                             <img
                                 :src="videoInfo.thumbnail"
                                 alt="Thumbnail"
                                 class="video-thumbnail"
-                                :class="{ 'hidden': playerReady }"
+                                :class="{ 'hidden': playerReady && !playerError }"
                             >
-                            <!-- Player YouTube (overlay, loads in background) -->
-                            <div class="youtube-player-wrapper" :class="{ 'visible': playerReady }">
+                            <!-- Player YouTube (mostrar apenas quando pronto E sem erro) -->
+                            <div class="youtube-player-wrapper" :class="{ 'visible': playerReady && !playerError }">
                                 <!-- Target div created dynamically by initPlayer() -->
                             </div>
                             <!-- Mensagem de erro se embed não disponível -->
