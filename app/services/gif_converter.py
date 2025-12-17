@@ -456,22 +456,22 @@ def apply_palette_to_frames(
     Trade-off: gradientes podem ter banding, mas animação será suave.
 
     Args:
-        frames: Lista de frames PIL
+        frames: Lista de frames PIL (esperados em RGB)
         palette_image: Imagem quantizada com paleta (de create_global_palette)
 
     Returns:
-        Lista de frames quantizados com paleta consistente
+        Lista de frames quantizados com paleta consistente (RGB)
     """
     result = []
 
     for frame in frames:
-        # Converter para RGB e aplicar paleta
-        rgb_frame = frame.convert('RGB')
+        # Evitar conversão se já está em RGB (frames de convert_image_pil já são RGB)
+        rgb_frame = frame.convert('RGB') if frame.mode != 'RGB' else frame
         quantized = rgb_frame.quantize(
             palette=palette_image,
             dither=0  # Sem dithering = consistência temporal
         )
-        # Converter de volta para RGB para compatibilidade
+        # Converter de volta para RGB (quantize retorna modo 'P')
         result.append(quantized.convert('RGB'))
 
     return result

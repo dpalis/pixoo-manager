@@ -18,6 +18,10 @@ from app.middleware import RateLimiter, check_rate_limit
 router = APIRouter()
 
 # Thread-safe state using asyncio.Lock
+# NOTE: _enabled uses "initialization barrier" pattern:
+# - Written ONLY during sync startup via disable_auto_shutdown() (before event loop)
+# - Read ONLY during async runtime via _get_enabled() (with lock)
+# This is safe because startup completes before any async reads occur.
 _lock = asyncio.Lock()
 _last_heartbeat: float = time.time()
 _shutdown_task: Optional[asyncio.Task] = None
@@ -35,13 +39,6 @@ async def _get_enabled() -> bool:
     """Thread-safe getter for _enabled."""
     async with _lock:
         return _enabled
-
-
-async def _set_enabled(value: bool) -> None:
-    """Thread-safe setter for _enabled."""
-    global _enabled
-    async with _lock:
-        _enabled = value
 
 
 async def _get_last_heartbeat() -> float:

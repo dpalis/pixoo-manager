@@ -384,7 +384,8 @@
     <!-- Cropper.js - Recorte de imagens -->
     <script src="/static/vendor/cropper.min.js"></script>
 
-    <!-- YouTube IFrame API -->
+    {% if active_tab == 'youtube' %}
+    <!-- YouTube IFrame API (only loaded on YouTube tab) -->
     <script>
         // Flag global para saber quando API está pronta
         window.youtubeApiReady = false;
@@ -395,6 +396,7 @@
         };
     </script>
     <script src="https://www.youtube.com/iframe_api"></script>
+    {% endif %}
 
     <!-- Alpine.js - Interatividade -->
     <script src="/static/vendor/alpine.min.js" defer></script>
