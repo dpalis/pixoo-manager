@@ -28,11 +28,10 @@ from app.services.exceptions import ConversionError, VideoTooLongError
 from app.services.gif_converter import (
     ConvertOptions,
     adaptive_downscale,
-    apply_palette_to_frames,
-    create_global_palette,
     enhance_for_led_display,
     quantize_colors,
 )
+from app.services.palette_manager import apply_palette_to_frames, create_global_palette
 
 
 @dataclass
