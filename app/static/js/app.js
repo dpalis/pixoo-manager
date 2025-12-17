@@ -7,55 +7,54 @@
 // Heartbeat - Keep server alive while browser is open
 // ============================================
 (function() {
-    let consecutiveFailures = 0;
-    const MAX_FAILURES = 5;
+    console.log('[Heartbeat] Iniciando sistema de heartbeat');
+    let heartbeatCount = 0;
 
     async function sendHeartbeat() {
+        heartbeatCount++;
         try {
             const response = await fetch('/api/heartbeat', { method: 'POST' });
             if (response.ok) {
-                consecutiveFailures = 0;
-            } else if (response.status === 429) {
-                // Rate limited - this is fine, server knows we're alive
-                console.debug('[Heartbeat] Rate limited, will retry');
+                console.log(`[Heartbeat] #${heartbeatCount} OK`);
             } else {
-                consecutiveFailures++;
-                console.warn(`[Heartbeat] Server returned ${response.status}`);
+                console.warn(`[Heartbeat] #${heartbeatCount} Status: ${response.status}`);
             }
         } catch (error) {
-            consecutiveFailures++;
-            console.warn('[Heartbeat] Failed:', error.message);
-
-            // After multiple failures, warn user
-            if (consecutiveFailures >= MAX_FAILURES) {
-                console.error('[Heartbeat] Server may have disconnected');
-            }
+            console.error(`[Heartbeat] #${heartbeatCount} Erro:`, error.message);
         }
     }
 
-    // Send heartbeat every 20 seconds (more frequent for reliability)
-    setInterval(sendHeartbeat, 20000);
+    // Send heartbeat every 15 seconds
+    const intervalId = setInterval(sendHeartbeat, 15000);
+    console.log('[Heartbeat] Interval configurado: 15s');
 
     // Send initial heartbeat immediately
     sendHeartbeat();
 
-    // Also send heartbeat when page becomes visible (user returns to tab)
+    // Also send heartbeat when page becomes visible
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+            console.log('[Heartbeat] Tab visível, enviando heartbeat');
             sendHeartbeat();
         }
     });
 })();
 
 // ============================================
-// Page Load State Cleanup (runs immediately)
+// Page Reload State Cleanup (F5 only)
 // ============================================
 (function() {
-    // Always clear state on page load
-    // State should not persist across page navigations, refreshes, or app restarts
-    console.log('[App] Page load - clearing all state');
-    localStorage.removeItem('mediaUpload');
-    localStorage.removeItem('youtubeDownload');
+    // Detectar tipo de navegação
+    const navEntries = performance.getEntriesByType('navigation');
+    const navType = navEntries.length > 0 ? navEntries[0].type : 'unknown';
+    console.log('[App] Navigation type:', navType);
+
+    // Limpar estado APENAS em reload (F5), não em navegação entre abas
+    if (navType === 'reload') {
+        console.log('[App] F5 detected - clearing all state');
+        localStorage.removeItem('mediaUpload');
+        localStorage.removeItem('youtubeDownload');
+    }
 })();
 
 // ============================================
@@ -897,10 +896,6 @@ function youtubeDownload() {
         sending: false,
         message: '',
         messageType: '',
-        // YouTube player state
-        player: null,
-        playerReady: false,
-        playerError: false,
 
         async init() {
             await this.restoreState();
@@ -995,9 +990,6 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.max_duration, this.videoInfo.duration);
                 this.endTimeStr = utils.formatTime(this.endTime);
 
-                // Inicializar player YouTube após obter info
-                this.$nextTick(() => this.initPlayer());
-
             } catch (e) {
                 console.error('Erro:', e);
                 this.showMessage('Erro ao buscar video', 'error');
@@ -1006,98 +998,12 @@ function youtubeDownload() {
             }
         },
 
-        initPlayer() {
-            // Aguardar API estar pronta
-            if (!window.youtubeApiReady) {
-                window.addEventListener('youtube-api-ready', () => this.initPlayer(), { once: true });
-                return;
-            }
-
-            // Destruir player anterior se existir
-            this.destroyPlayer();
-
-            if (!this.videoInfo) return;
-
-            const containerId = `youtube-player-${this.videoInfo.id}`;
-            const container = document.getElementById(containerId);
-            if (!container) {
-                console.warn('Container do player não encontrado:', containerId);
-                return;
-            }
-
-            // Criar novo player
-            this.player = new YT.Player(containerId, {
-                height: '180',
-                width: '320',
-                videoId: this.videoInfo.id,
-                playerVars: {
-                    'playsinline': 1,
-                    'controls': 0,
-                    'modestbranding': 1,
-                    'rel': 0,
-                    'mute': 1,
-                    'origin': window.location.origin
-                },
-                events: {
-                    'onReady': (e) => this.onPlayerReady(e),
-                    'onError': (e) => this.onPlayerError(e)
-                }
-            });
-        },
-
-        onPlayerReady(event) {
-            // Verificar após pequeno delay se o player realmente funciona
-            // Alguns vídeos "carregam" mas não reproduzem
-            setTimeout(() => {
-                try {
-                    const state = this.player.getPlayerState();
-                    // -1 = não iniciado, 5 = video cued
-                    // Se após 1s ainda está nesses estados, assumir que funciona
-                    // (usuario pode ter pausado)
-                    this.playerReady = true;
-                    this.playerError = false;
-                    this.player.seekTo(this.startTime, true);
-                    this.player.pauseVideo();
-                } catch (e) {
-                    console.warn('[YouTube] Player não funcional:', e);
-                    this.playerError = true;
-                    this.playerReady = false;
-                }
-            }, 500);
-        },
-
-        onPlayerError(event) {
-            // Qualquer erro do player = mostrar fallback
-            console.warn('[YouTube] Player error:', event.data);
-            this.playerError = true;
-            this.playerReady = false;
-        },
-
-        destroyPlayer() {
-            if (this.player) {
-                try {
-                    this.player.destroy();
-                } catch (e) {
-                    console.warn('Erro ao destruir player:', e);
-                }
-                this.player = null;
-            }
-            this.playerReady = false;
-            this.playerError = false;
-        },
-
         updateStartTime() {
             this.startTime = parseFloat(this.startTime);
             if (this.startTime >= this.endTime) {
                 this.startTime = Math.max(0, this.endTime - 0.1);
             }
             this.startTimeStr = utils.formatTime(this.startTime);
-
-            // Seek do player YouTube
-            if (this.player && this.playerReady) {
-                this.player.seekTo(this.startTime, true);
-                this.player.pauseVideo();
-            }
         },
 
         updateEndTime() {
@@ -1106,12 +1012,6 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
             }
             this.endTimeStr = utils.formatTime(this.endTime);
-
-            // Seek do player YouTube
-            if (this.player && this.playerReady) {
-                this.player.seekTo(this.endTime, true);
-                this.player.pauseVideo();
-            }
         },
 
         parseStartTime() {
@@ -1119,12 +1019,6 @@ function youtubeDownload() {
             if (seconds !== null && this.videoInfo) {
                 this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
                 this.startTimeStr = utils.formatTime(this.startTime);
-
-                // Seek do player YouTube
-                if (this.player && this.playerReady) {
-                    this.player.seekTo(this.startTime, true);
-                    this.player.pauseVideo();
-                }
             }
         },
 
@@ -1133,12 +1027,6 @@ function youtubeDownload() {
             if (seconds !== null && this.videoInfo) {
                 this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoInfo.duration));
                 this.endTimeStr = utils.formatTime(this.endTime);
-
-                // Seek do player YouTube
-                if (this.player && this.playerReady) {
-                    this.player.seekTo(this.endTime, true);
-                    this.player.pauseVideo();
-                }
             }
         },
 
@@ -1220,9 +1108,6 @@ function youtubeDownload() {
         },
 
         clearVideo() {
-            // Destruir player ao limpar
-            this.destroyPlayer();
-
             this.url = '';
             this.videoInfo = null;
             this.startTime = 0;
