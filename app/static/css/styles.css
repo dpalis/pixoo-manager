@@ -249,8 +249,8 @@ nav.tabs {
 
 /* Preview escalado - mostra GIF ampliado para visualização */
 .gif-preview-scaled {
-    width: 320px;
-    height: 320px;
+    width: 512px;
+    height: 512px;
     max-width: 100%;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
