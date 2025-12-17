@@ -7,32 +7,17 @@
 // Heartbeat - Keep server alive while browser is open
 // ============================================
 (function() {
-    const indicator = document.getElementById('heartbeat-indicator');
-
-    function updateIndicator(success) {
-        if (!indicator) return;
-        indicator.style.opacity = '1';
-        indicator.textContent = success ? '💚' : '❌';
-        setTimeout(() => {
-            indicator.style.opacity = '0.5';
-            indicator.textContent = '💓';
-        }, 500);
-    }
-
     async function sendHeartbeat() {
         try {
-            const response = await fetch('/api/heartbeat', { method: 'POST' });
-            updateIndicator(response.ok);
+            await fetch('/api/heartbeat', { method: 'POST' });
         } catch {
-            updateIndicator(false);
+            // Silently ignore errors
         }
     }
 
-    // Send heartbeat every 15 seconds
     setInterval(sendHeartbeat, 15000);
     sendHeartbeat();
 
-    // Also send heartbeat when page becomes visible
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') sendHeartbeat();
     });

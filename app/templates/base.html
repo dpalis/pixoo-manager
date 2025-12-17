@@ -21,8 +21,6 @@
         <header class="app-header" x-data="connectionStatus()">
             <div class="header-top">
                 <h1 class="app-title">Pixoo Manager</h1>
-                <!-- Heartbeat indicator -->
-                <span id="heartbeat-indicator" title="Heartbeat status" style="font-size: 0.7em; opacity: 0.5; margin-right: 1rem;">💓</span>
                 <div class="connection-status">
                     <span class="status-indicator" :class="connected ? 'connected' : 'disconnected'"></span>
                     <span class="status-text" x-text="statusText"></span>
