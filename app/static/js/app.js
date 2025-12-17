@@ -6,22 +6,20 @@
 // ============================================
 // Heartbeat - Keep server alive while browser is open
 // ============================================
-(function() {
-    async function sendHeartbeat() {
-        try {
-            await fetch('/api/heartbeat', { method: 'POST' });
-        } catch {
-            // Silently ignore errors
-        }
+async function sendHeartbeat() {
+    try {
+        await fetch('/api/heartbeat', { method: 'POST' });
+    } catch {
+        // Silently ignore errors
     }
+}
 
-    setInterval(sendHeartbeat, 15000);
-    sendHeartbeat();
+setInterval(sendHeartbeat, 15000);
+sendHeartbeat();
 
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') sendHeartbeat();
-    });
-})();
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sendHeartbeat();
+});
 
 // ============================================
 // Session-based State Management
@@ -104,6 +102,49 @@ const utils = {
     clearMessage(component) {
         component.message = '';
         component.messageType = '';
+    }
+};
+
+// ============================================
+// Time Management Mixin (shared between mediaUpload and youtubeDownload)
+// ============================================
+const timeManagementMixin = {
+    updateStartTime() {
+        this.startTime = parseFloat(this.startTime);
+        if (this.startTime >= this.endTime) {
+            this.startTime = Math.max(0, this.endTime - 0.1);
+        }
+        this.startTimeStr = utils.formatTime(this.startTime);
+        if (this.seekToTime) this.seekToTime(this.startTime);
+    },
+
+    updateEndTime() {
+        this.endTime = parseFloat(this.endTime);
+        const maxDuration = this.getMaxDuration();
+        if (this.endTime <= this.startTime) {
+            this.endTime = Math.min(maxDuration, this.startTime + 0.1);
+        }
+        this.endTimeStr = utils.formatTime(this.endTime);
+        if (this.seekToTime) this.seekToTime(this.endTime);
+    },
+
+    parseStartTime() {
+        const seconds = utils.parseTimeStr(this.startTimeStr);
+        if (seconds !== null && this.getMaxDuration() > 0) {
+            this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
+            this.startTimeStr = utils.formatTime(this.startTime);
+            if (this.seekToTime) this.seekToTime(this.startTime);
+        }
+    },
+
+    parseEndTime() {
+        const seconds = utils.parseTimeStr(this.endTimeStr);
+        const maxDuration = this.getMaxDuration();
+        if (seconds !== null && maxDuration > 0) {
+            this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, maxDuration));
+            this.endTimeStr = utils.formatTime(this.endTime);
+            if (this.seekToTime) this.seekToTime(this.endTime);
+        }
     }
 };
 
@@ -363,6 +404,7 @@ function gifUpload() {
 // ============================================
 function mediaUpload() {
     return {
+        ...timeManagementMixin,
         dragOver: false,
         file: null,
         uploadId: null,
@@ -674,55 +716,14 @@ function mediaUpload() {
             // Opcional: atualizar UI durante reproducao
         },
 
-        updateStartTime() {
-            this.startTime = parseFloat(this.startTime);
-            if (this.startTime >= this.endTime) {
-                this.startTime = Math.max(0, this.endTime - 0.1);
-            }
-            this.startTimeStr = utils.formatTime(this.startTime);
+        // Time management mixin delegates
+        getMaxDuration() {
+            return this.videoDuration;
+        },
 
-            // Seek do vídeo para posição do slider
+        seekToTime(time) {
             if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
-                this.$refs.videoPlayer.currentTime = this.startTime;
-            }
-        },
-
-        updateEndTime() {
-            this.endTime = parseFloat(this.endTime);
-            if (this.endTime <= this.startTime) {
-                this.endTime = Math.min(this.videoDuration, this.startTime + 0.1);
-            }
-            this.endTimeStr = utils.formatTime(this.endTime);
-
-            // Seek do vídeo para posição do slider
-            if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
-                this.$refs.videoPlayer.currentTime = this.endTime;
-            }
-        },
-
-        parseStartTime() {
-            const seconds = utils.parseTimeStr(this.startTimeStr);
-            if (seconds !== null) {
-                this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
-                this.startTimeStr = utils.formatTime(this.startTime);
-
-                // Seek do vídeo para posição digitada
-                if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
-                    this.$refs.videoPlayer.currentTime = this.startTime;
-                }
-            }
-        },
-
-        parseEndTime() {
-            const seconds = utils.parseTimeStr(this.endTimeStr);
-            if (seconds !== null) {
-                this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoDuration));
-                this.endTimeStr = utils.formatTime(this.endTime);
-
-                // Seek do vídeo para posição digitada
-                if (this.$refs.videoPlayer && this.$refs.videoPlayer.readyState >= 2) {
-                    this.$refs.videoPlayer.currentTime = this.endTime;
-                }
+                this.$refs.videoPlayer.currentTime = time;
             }
         },
 
@@ -868,6 +869,7 @@ function mediaUpload() {
 // ============================================
 function youtubeDownload() {
     return {
+        ...timeManagementMixin,
         url: '',
         loading: false,
         videoInfo: null,
@@ -986,36 +988,9 @@ function youtubeDownload() {
             }
         },
 
-        updateStartTime() {
-            this.startTime = parseFloat(this.startTime);
-            if (this.startTime >= this.endTime) {
-                this.startTime = Math.max(0, this.endTime - 0.1);
-            }
-            this.startTimeStr = utils.formatTime(this.startTime);
-        },
-
-        updateEndTime() {
-            this.endTime = parseFloat(this.endTime);
-            if (this.endTime <= this.startTime) {
-                this.endTime = Math.min(this.videoInfo.duration, this.startTime + 0.1);
-            }
-            this.endTimeStr = utils.formatTime(this.endTime);
-        },
-
-        parseStartTime() {
-            const seconds = utils.parseTimeStr(this.startTimeStr);
-            if (seconds !== null && this.videoInfo) {
-                this.startTime = Math.max(0, Math.min(seconds, this.endTime - 0.1));
-                this.startTimeStr = utils.formatTime(this.startTime);
-            }
-        },
-
-        parseEndTime() {
-            const seconds = utils.parseTimeStr(this.endTimeStr);
-            if (seconds !== null && this.videoInfo) {
-                this.endTime = Math.max(this.startTime + 0.1, Math.min(seconds, this.videoInfo.duration));
-                this.endTimeStr = utils.formatTime(this.endTime);
-            }
+        // Time management mixin delegate (no seekToTime - YouTube uses embed)
+        getMaxDuration() {
+            return this.videoInfo?.duration || 0;
         },
 
         async downloadAndConvert() {
