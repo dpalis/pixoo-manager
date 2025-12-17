@@ -13,8 +13,8 @@ from PIL import Image
 
 from app.config import PREVIEW_SCALE
 
-# Limite de frames para scaling (evita uso excessivo de memoria)
-MAX_FRAMES_FOR_SCALING = 60
+# Limite de frames para scaling (alinhado com MAX_CONVERT_FRAMES)
+MAX_FRAMES_FOR_SCALING = 92
 
 
 @lru_cache(maxsize=32)
