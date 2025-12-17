@@ -466,7 +466,7 @@ def apply_palette_to_frames(
 
     for frame in frames:
         # Evitar conversão se já está em RGB (frames de convert_image_pil já são RGB)
-        rgb_frame = frame if frame.mode == 'RGB' else frame.convert('RGB')
+        rgb_frame = frame.convert('RGB') if frame.mode != 'RGB' else frame
         quantized = rgb_frame.quantize(
             palette=palette_image,
             dither=0  # Sem dithering = consistência temporal
