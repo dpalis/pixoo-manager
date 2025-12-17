@@ -30,6 +30,7 @@ class ConvertOptions:
     darken_bg: bool = False
     num_colors: int = 0  # 0 = não quantizar
     auto_brightness: bool = True  # Ajuste automático para imagens escuras
+    auto_hdr: bool = True  # Detectar e tratar cenas HDR (céu escuro + luzes)
 
 
 @dataclass
@@ -213,6 +214,49 @@ def detect_brightness(image: Image.Image) -> float:
     return stat.rms[0] / 255.0
 
 
+def detect_dynamic_range(image: Image.Image) -> Tuple[float, bool]:
+    """
+    Detecta se imagem tem alto range dinâmico (HDR-like).
+
+    Usa desvio padrão da luminosidade + análise de histograma bimodal.
+    Cenas noturnas com luzes (céu escuro + janelas brilhantes) são detectadas.
+
+    Args:
+        image: Imagem PIL (qualquer modo)
+
+    Returns:
+        Tupla (std_dev normalizado, is_hdr flag)
+    """
+    grayscale = image.convert('L')
+    stat = ImageStat.Stat(grayscale)
+
+    # Desvio padrão da luminosidade (normalizado 0-1)
+    std_dev = stat.stddev[0] / 255.0
+
+    # Histograma para detectar bimodalidade (muitos escuros + alguns claros)
+    histogram = grayscale.histogram()
+
+    # Dividir em regiões
+    dark = sum(histogram[0:64])       # 0-63: muito escuro
+    light = sum(histogram[192:256])   # 192-255: muito claro
+    total = sum(histogram)
+
+    dark_ratio = dark / total if total > 0 else 0
+    light_ratio = light / total if total > 0 else 0
+
+    # HDR = cenas com alto contraste que precisam de tone mapping:
+    # 1. Muitos pixels escuros E alguns claros (cena noturna com luzes)
+    # 2. Muitos pixels claros E alguns escuros (cena clara com sombras)
+    # 3. Alto desvio padrão (grande variação de luminosidade)
+    # 4. Cenas muito escuras (>70% escuro) - precisam de levantamento de sombras
+    is_hdr = (dark_ratio > 0.5 and light_ratio > 0.005) or \
+             (light_ratio > 0.5 and dark_ratio > 0.005) or \
+             std_dev > 0.25 or \
+             dark_ratio > 0.7  # Cenas noturnas/escuras
+
+    return std_dev, is_hdr
+
+
 def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
     """
     Aplica correção gamma para clarear tons escuros.
@@ -236,12 +280,71 @@ def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Imag
     return image.point(lut * 3)
 
 
+def apply_local_tone_mapping(image: Image.Image, shadow_boost: float = 0.4) -> Image.Image:
+    """
+    Aplica tone mapping para comprimir range dinâmico em cenas HDR.
+
+    Levanta sombras agressivamente enquanto preserva highlights.
+    Usa curva logarítmica para compressão natural do range dinâmico.
+
+    Args:
+        image: Imagem PIL RGB
+        shadow_boost: Intensidade do levantamento de sombras (0.3-0.6)
+
+    Returns:
+        Imagem com range dinâmico comprimido
+    """
+    rgb = np.array(image, dtype=np.float32) / 255.0
+
+    # Luminosidade percebida (ITU-R BT.601)
+    r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+
+    # Curva de tone mapping: levanta sombras, comprime highlights
+    # Fórmula: out = (in ^ gamma) onde gamma < 1 clareia
+    # Mas usar gamma fixo não funciona bem para HDR
+    # Usar curva adaptativa: mais boost para pixels escuros
+
+    # Calcular gamma adaptativo por pixel
+    # Pixels escuros (lum < 0.3) recebem gamma menor (mais clareamento)
+    # Pixels claros (lum > 0.7) recebem gamma maior (menos mudança)
+    gamma = np.where(
+        lum < 0.3,
+        shadow_boost,  # Gamma baixo para sombras (ex: 0.4)
+        np.where(
+            lum > 0.7,
+            0.9,  # Gamma alto para highlights (preservar)
+            shadow_boost + (lum - 0.3) * (0.9 - shadow_boost) / 0.4  # Transição suave
+        )
+    )
+
+    # Aplicar correção gamma a cada canal preservando proporções de cor
+    # Evitar divisão por zero
+    lum_safe = np.maximum(lum, 0.001)
+
+    # Calcular nova luminosidade
+    lum_new = np.power(lum_safe, gamma)
+
+    # Calcular fator de escala
+    scale = lum_new / lum_safe
+
+    # Aplicar escala aos canais RGB
+    r_out = np.clip(r * scale, 0, 1)
+    g_out = np.clip(g * scale, 0, 1)
+    b_out = np.clip(b * scale, 0, 1)
+
+    # Converter de volta para uint8
+    result = (np.stack([r_out, g_out, b_out], axis=2) * 255).astype(np.uint8)
+    return Image.fromarray(result, 'RGB')
+
+
 def enhance_for_led_display(
     image: Image.Image,
     contrast: float = 1.4,
     saturation: float = 1.3,
     sharpness: float = 1.5,
-    auto_brightness: bool = True
+    auto_brightness: bool = True,
+    auto_hdr: bool = True
 ) -> Image.Image:
     """
     Otimiza imagem para displays LED como Pixoo 64.
@@ -250,25 +353,44 @@ def enhance_for_led_display(
     - Aumenta saturação para cores mais vivas no LED
     - Aplica sharpening para definição
 
+    Se auto_hdr=True, detecta cenas HDR (céu escuro + luzes) e aplica
+    tone mapping para comprimir range dinâmico antes dos outros ajustes.
+
     Se auto_brightness=True, detecta brilho e ajusta parâmetros:
     - Imagens escuras (brightness < 0.3): gamma correction + parâmetros suaves
     - Imagens normais: parâmetros padrão
 
     Args:
         image: Imagem PIL
-        contrast: Fator de contraste (ignorado se auto_brightness e imagem escura)
+        contrast: Fator de contraste
         saturation: Fator de saturação
         sharpness: Fator de nitidez
-        auto_brightness: Detectar e ajustar automaticamente
+        auto_brightness: Detectar e ajustar para imagens escuras
+        auto_hdr: Detectar e tratar cenas HDR (céu escuro + luzes)
 
     Returns:
         Imagem otimizada para LED
     """
     img = image
 
-    # Detecção e ajuste para imagens escuras
+    # NOVO: Detectar e tratar cenas HDR primeiro
+    if auto_hdr:
+        _, is_hdr = detect_dynamic_range(image)
+
+        if is_hdr:
+            # Aplicar tone mapping para comprimir range dinâmico
+            img = apply_local_tone_mapping(img, shadow_boost=0.4)
+
+            # Ajustes mais suaves para HDR (tone mapping já fez o trabalho pesado)
+            contrast = 1.15
+            saturation = 1.2
+
+            # Pular gamma correction (tone mapping já ajustou)
+            auto_brightness = False
+
+    # Detecção e ajuste para imagens escuras (se não for HDR)
     if auto_brightness:
-        brightness = detect_brightness(image)
+        brightness = detect_brightness(img)
 
         if brightness < 0.3:  # Imagem escura
             # Passo 1: Gamma correction para clarear tons escuros
@@ -277,7 +399,7 @@ def enhance_for_led_display(
             # Passo 2: Contraste mais suave (não esmagar tons)
             contrast = 1.15
 
-            # Passo 3: Saturação reduzida (tons escuros ficam estranhos com alta saturação)
+            # Passo 3: Saturação reduzida
             saturation = 1.1
 
     # 1. Contraste - separa figura do fundo
@@ -570,7 +692,8 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
             contrast=1.4,
             saturation=1.3,
             sharpness=1.5,
-            auto_brightness=options.auto_brightness
+            auto_brightness=options.auto_brightness,
+            auto_hdr=options.auto_hdr
         )
 
     # Escurecer fundo para destacar figura clara
