@@ -6,6 +6,8 @@ Build with: python setup.py py2app
 
 from setuptools import setup
 
+from app.__version__ import __version__
+
 APP = ["app/main.py"]
 DATA_FILES = [
     ("templates", ["app/templates/base.html"]),
@@ -27,8 +29,8 @@ OPTIONS = {
         "CFBundleName": "Pixoo",
         "CFBundleDisplayName": "Pixoo",
         "CFBundleIdentifier": "com.pixoo.manager",
-        "CFBundleVersion": "1.2.0",
-        "CFBundleShortVersionString": "1.2.0",
+        "CFBundleVersion": __version__,
+        "CFBundleShortVersionString": __version__,
         "LSMinimumSystemVersion": "10.15",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
@@ -47,6 +49,10 @@ OPTIONS = {
         "pydantic",
         "scipy",
         "charset_normalizer",
+        "imageio",
+        "numpy",
+        "aiofiles",
+        "httptools",
         "app",
     ],
     "excludes": [
