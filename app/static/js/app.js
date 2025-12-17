@@ -1116,6 +1116,14 @@ function youtubeDownload() {
             }
             this.playerReady = false;
             this.playerError = false;
+
+            // Recreate the target div (YouTube API removes it on destroy)
+            const wrapper = document.querySelector('.youtube-player-wrapper');
+            if (wrapper && !document.getElementById('youtube-player')) {
+                const newTarget = document.createElement('div');
+                newTarget.id = 'youtube-player';
+                wrapper.appendChild(newTarget);
+            }
         },
 
         async downloadAndConvert() {
