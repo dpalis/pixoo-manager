@@ -1081,30 +1081,20 @@ function youtubeDownload() {
                         modestbranding: 1,
                         rel: 0,           // No related videos
                         mute: 1,          // Muted for autoplay
-                        playsinline: 1,   // iOS inline playback
-                        autoplay: 1       // Start loading immediately
+                        playsinline: 1    // iOS inline playback
                     },
                     events: {
                         onReady: () => {
-                            // Player API ready, but video might still be loading
-                            // Start playback to trigger video loading
-                            if (this.player) {
-                                this.player.playVideo();
+                            // Player API ready - mark as ready immediately
+                            // Don't wait for PLAYING state (autoplay often blocked)
+                            if (this.playerTimeout) {
+                                clearTimeout(this.playerTimeout);
+                                this.playerTimeout = null;
                             }
-                        },
-                        onStateChange: (event) => {
-                            // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-                            if (event.data === YT.PlayerState.PLAYING && !this.playerReady) {
-                                // Video is actually playing - now we can seek
-                                if (this.playerTimeout) {
-                                    clearTimeout(this.playerTimeout);
-                                    this.playerTimeout = null;
-                                }
-                                this.playerReady = true;
-                                if (this.player) {
-                                    this.player.seekTo(this.startTime, true);
-                                    this.player.pauseVideo();
-                                }
+                            this.playerReady = true;
+                            // Seek to start position
+                            if (this.player) {
+                                this.player.seekTo(this.startTime, true);
                             }
                         },
                         onError: (e) => {

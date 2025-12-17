@@ -661,6 +661,10 @@ button.secondary:hover {
     flex-shrink: 0;
 }
 
+.video-thumbnail.hidden {
+    display: none;
+}
+
 
 .video-details {
     flex: 1;
