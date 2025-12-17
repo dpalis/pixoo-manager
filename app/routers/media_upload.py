@@ -11,7 +11,7 @@ Endpoints:
 import asyncio
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -210,6 +210,22 @@ async def get_media_info(upload_id: str):
             "height": metadata.height,
             "frames": metadata.frames
         }
+
+
+@router.head("/preview/{upload_id}")
+async def head_media_preview(upload_id: str):
+    """Verifica se preview existe (para validacao de estado)."""
+    upload = media_uploads.get(upload_id)
+    if upload is None:
+        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+
+    path = upload.get("converted_path") or upload.get("path")
+
+    if not path or not path.exists():
+        media_uploads.delete(upload_id)
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+
+    return Response(status_code=200)
 
 
 @router.get("/preview/{upload_id}")

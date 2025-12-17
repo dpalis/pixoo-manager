@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Dict
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -150,6 +150,22 @@ async def upload_gif_file(file: UploadFile = File(...)):
     except Exception as e:
         cleanup_files([temp_path])
         raise HTTPException(status_code=500, detail=f"Erro ao processar GIF: {e}")
+
+
+@router.head("/preview/{upload_id}")
+async def head_gif_preview(upload_id: str):
+    """Verifica se preview existe (para validacao de estado)."""
+    upload_info = gif_uploads.get(upload_id)
+    if upload_info is None:
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
+
+    path = upload_info["path"]
+
+    if not path.exists():
+        gif_uploads.delete(upload_id)
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    return Response(status_code=200)
 
 
 @router.get("/preview/{upload_id}")
