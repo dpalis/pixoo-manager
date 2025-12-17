@@ -127,6 +127,34 @@ async def heartbeat_status():
     }
 
 
+@router.post("/api/heartbeat/disable")
+async def disable_shutdown():
+    """
+    Disable auto-shutdown at runtime.
+
+    Useful for agents running long tasks that need to prevent
+    the server from shutting down due to inactivity.
+    """
+    global _enabled
+    async with _lock:
+        _enabled = False
+    return {"status": "disabled", "auto_shutdown": False}
+
+
+@router.post("/api/heartbeat/enable")
+async def enable_shutdown():
+    """
+    Re-enable auto-shutdown at runtime.
+
+    Also resets the heartbeat timer to prevent immediate shutdown.
+    """
+    global _enabled, _last_heartbeat
+    async with _lock:
+        _enabled = True
+        _last_heartbeat = time.time()
+    return {"status": "enabled", "auto_shutdown": True}
+
+
 @router.post("/api/system/shutdown")
 async def shutdown():
     """

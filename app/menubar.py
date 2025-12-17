@@ -38,8 +38,15 @@ def create_menu_bar(server_url: str = "http://127.0.0.1:8000"):
             webbrowser.open(self.server_url)
 
         def quit_app(self, _):
-            """Quit the application."""
-            rumps.quit_application()
+            """Quit the application with confirmation."""
+            response = rumps.alert(
+                title="Encerrar Pixoo Manager?",
+                message="Conversões em andamento serão perdidas.",
+                ok="Encerrar",
+                cancel="Cancelar"
+            )
+            if response == 1:  # OK clicked
+                rumps.quit_application()
 
     return PixooMenuBar()
 
