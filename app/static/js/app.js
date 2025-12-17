@@ -1086,16 +1086,23 @@ function youtubeDownload() {
                     events: {
                         onReady: () => {
                             // Player API ready - mark as ready immediately
-                            // Don't wait for PLAYING state (autoplay often blocked)
                             if (this.playerTimeout) {
                                 clearTimeout(this.playerTimeout);
                                 this.playerTimeout = null;
                             }
                             this.playerReady = true;
-                            // Seek to start position and ensure paused
-                            if (this.player) {
-                                this.player.seekTo(this.startTime, true);
-                                this.player.pauseVideo();
+                            // Don't seek on load - just let it show first frame
+                            // Seek will happen when user moves slider
+                        },
+                        onStateChange: (event) => {
+                            // When video starts playing, let it show one frame then pause
+                            // This allows the frame to render before we pause
+                            if (event.data === YT.PlayerState.PLAYING) {
+                                setTimeout(() => {
+                                    if (this.player) {
+                                        this.player.pauseVideo();
+                                    }
+                                }, 100);
                             }
                         },
                         onError: (e) => {
