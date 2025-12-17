@@ -612,12 +612,24 @@ button.secondary:hover {
 
 .youtube-player-container {
     flex-shrink: 0;
+    position: relative;
 }
 
 .youtube-player {
     width: 320px;
     height: 180px;
     border-radius: 0.25rem;
+}
+
+.player-error-badge {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--secondary-inverse);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
 }
 
 .video-thumbnail {

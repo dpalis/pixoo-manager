@@ -886,6 +886,10 @@ function youtubeDownload() {
         sending: false,
         message: '',
         messageType: '',
+        // YouTube player state
+        player: null,
+        playerReady: false,
+        playerError: false,
 
         async init() {
             await this.restoreState();
@@ -980,6 +984,12 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.max_duration, this.videoInfo.duration);
                 this.endTimeStr = utils.formatTime(this.endTime);
 
+                // Initialize YouTube player for preview
+                const videoId = this.extractVideoId(this.url);
+                if (videoId) {
+                    this.initPlayer(videoId);
+                }
+
             } catch (e) {
                 console.error('Erro:', e);
                 this.showMessage('Erro ao buscar video', 'error');
@@ -988,9 +998,87 @@ function youtubeDownload() {
             }
         },
 
-        // Time management mixin delegate (no seekToTime - YouTube uses embed)
+        // Extract video ID from YouTube URL
+        extractVideoId(url) {
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&?/]+)/,
+            ];
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        },
+
+        // Time management mixin delegate
         getMaxDuration() {
             return this.videoInfo?.duration || 0;
+        },
+
+        // YouTube Player - seek to time for slider preview
+        seekToTime(time) {
+            if (this.player && this.playerReady) {
+                this.player.seekTo(time, true);
+                this.player.pauseVideo();
+            }
+        },
+
+        // Initialize YouTube embedded player
+        async initPlayer(videoId) {
+            // Destroy any existing player first
+            this.destroyPlayer();
+
+            // Wait for YouTube IFrame API to be ready
+            if (!window.youtubeApiReady) {
+                await new Promise(resolve => {
+                    window.addEventListener('youtube-api-ready', resolve, { once: true });
+                });
+            }
+
+            // Create player
+            try {
+                this.player = new YT.Player('youtube-player', {
+                    videoId: videoId,
+                    playerVars: {
+                        controls: 0,      // Hide controls
+                        disablekb: 1,     // Disable keyboard
+                        modestbranding: 1,
+                        rel: 0,           // No related videos
+                        mute: 1,          // Muted for autoplay
+                        playsinline: 1    // iOS inline playback
+                    },
+                    events: {
+                        onReady: () => {
+                            this.playerReady = true;
+                            this.player.seekTo(this.startTime, true);
+                            this.player.pauseVideo();
+                        },
+                        onError: (e) => {
+                            // Error codes: 2 = invalid param, 5 = HTML5 error,
+                            // 100 = not found, 101/150 = embed disabled
+                            console.warn('YouTube player error:', e.data);
+                            this.playerError = true;
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to create YouTube player:', e);
+                this.playerError = true;
+            }
+        },
+
+        // Destroy YouTube player
+        destroyPlayer() {
+            if (this.player) {
+                try {
+                    this.player.destroy();
+                } catch (e) {
+                    // Player might already be destroyed
+                }
+                this.player = null;
+            }
+            this.playerReady = false;
+            this.playerError = false;
         },
 
         async downloadAndConvert() {
@@ -1071,6 +1159,9 @@ function youtubeDownload() {
         },
 
         clearVideo() {
+            // Destroy YouTube player first
+            this.destroyPlayer();
+
             this.url = '';
             this.videoInfo = null;
             this.startTime = 0;
