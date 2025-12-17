@@ -37,13 +37,6 @@ async def _get_enabled() -> bool:
         return _enabled
 
 
-async def _set_enabled(value: bool) -> None:
-    """Thread-safe setter for _enabled."""
-    global _enabled
-    async with _lock:
-        _enabled = value
-
-
 async def _get_last_heartbeat() -> float:
     """Thread-safe getter for _last_heartbeat."""
     async with _lock:

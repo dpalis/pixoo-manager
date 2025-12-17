@@ -28,20 +28,20 @@
 // ============================================
 (function() {
     const serverSessionId = document.querySelector('meta[name="server-session-id"]')?.content;
-    const storedSessionId = localStorage.getItem('serverSessionId');
+    const storedSessionId = sessionStorage.getItem('serverSessionId');
 
     // Se session ID mudou (servidor reiniciou), limpar todo o estado
     if (serverSessionId && serverSessionId !== storedSessionId) {
-        localStorage.removeItem('mediaUpload');
-        localStorage.removeItem('youtubeDownload');
-        localStorage.setItem('serverSessionId', serverSessionId);
+        sessionStorage.removeItem('mediaUpload');
+        sessionStorage.removeItem('youtubeDownload');
+        sessionStorage.setItem('serverSessionId', serverSessionId);
     }
 
     // Também limpar em F5 (reload)
     const navEntries = performance.getEntriesByType('navigation');
     if (navEntries.length > 0 && navEntries[0].type === 'reload') {
-        localStorage.removeItem('mediaUpload');
-        localStorage.removeItem('youtubeDownload');
+        sessionStorage.removeItem('mediaUpload');
+        sessionStorage.removeItem('youtubeDownload');
     }
 })();
 
@@ -418,13 +418,13 @@ function mediaUpload() {
                 cropApplied: this.cropApplied
                 // Não salvar: file (File object), videoUrl (blob URL), cropper, originalImageUrl
             };
-            localStorage.setItem('mediaUpload', JSON.stringify(state));
+            sessionStorage.setItem('mediaUpload', JSON.stringify(state));
         },
 
         async restoreState() {
             // State is always cleared on page load (see top of file)
             // This function now only validates any remaining state
-            const saved = localStorage.getItem('mediaUpload');
+            const saved = sessionStorage.getItem('mediaUpload');
             if (!saved) return;
 
             try {
@@ -440,7 +440,7 @@ function mediaUpload() {
                     if (!response.ok) {
                         // Upload expirou no servidor
                         console.log('Upload expirado, limpando estado local');
-                        localStorage.removeItem('mediaUpload');
+                        sessionStorage.removeItem('mediaUpload');
                         return;
                     }
                 }
@@ -448,7 +448,7 @@ function mediaUpload() {
                 Object.assign(this, state);
             } catch (e) {
                 console.error('Erro ao restaurar estado:', e);
-                localStorage.removeItem('mediaUpload');
+                sessionStorage.removeItem('mediaUpload');
             }
         },
 
@@ -850,7 +850,7 @@ function mediaUpload() {
             this.cropApplying = false;
 
             this.clearMessage();
-            localStorage.removeItem('mediaUpload');
+            sessionStorage.removeItem('mediaUpload');
         },
 
         showMessage(text, type) {
@@ -905,13 +905,13 @@ function youtubeDownload() {
                 previewUrl: this.previewUrl,
                 convertedFrames: this.convertedFrames
             };
-            localStorage.setItem('youtubeDownload', JSON.stringify(state));
+            sessionStorage.setItem('youtubeDownload', JSON.stringify(state));
         },
 
         async restoreState() {
             // State is always cleared on page load (see top of file)
             // This function now only validates any remaining state
-            const saved = localStorage.getItem('youtubeDownload');
+            const saved = sessionStorage.getItem('youtubeDownload');
             if (!saved) return;
 
             try {
@@ -923,7 +923,7 @@ function youtubeDownload() {
                     if (!response.ok) {
                         // Download expirou no servidor
                         console.log('Download expirado, limpando estado local');
-                        localStorage.removeItem('youtubeDownload');
+                        sessionStorage.removeItem('youtubeDownload');
                         return;
                     }
                 }
@@ -931,7 +931,7 @@ function youtubeDownload() {
                 Object.assign(this, state);
             } catch (e) {
                 console.error('Erro ao restaurar estado:', e);
-                localStorage.removeItem('youtubeDownload');
+                sessionStorage.removeItem('youtubeDownload');
             }
         },
 
@@ -1107,7 +1107,7 @@ function youtubeDownload() {
             this.previewUrl = null;
             this.convertedFrames = 0;
             this.clearMessage();
-            localStorage.removeItem('youtubeDownload');
+            sessionStorage.removeItem('youtubeDownload');
         },
 
         showMessage(text, type) {
