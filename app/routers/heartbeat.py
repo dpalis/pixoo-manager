@@ -23,8 +23,8 @@ _last_heartbeat: float = time.time()
 _shutdown_task: Optional[asyncio.Task] = None
 _enabled: bool = True
 
-# Rate limiter: max 6 requests per minute (every 10s is generous)
-_heartbeat_limiter = RateLimiter(max_requests=6, window_seconds=60)
+# Rate limiter: max 20 requests per minute (generous for multiple tabs/reconnections)
+_heartbeat_limiter = RateLimiter(max_requests=20, window_seconds=60)
 
 # Configuration
 HEARTBEAT_INTERVAL = 30  # Browser sends every 30s

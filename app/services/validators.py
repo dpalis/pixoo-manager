@@ -236,7 +236,10 @@ def validate_video_duration(start: float, end: float, max_duration: float) -> fl
     if duration <= 0:
         raise ValidationError("Tempo final deve ser maior que o inicial")
 
-    if duration > max_duration:
+    # Arredondar para 1 casa decimal para evitar erros de ponto flutuante
+    # (ex: 10.0000001 > 10.0 seria True sem arredondamento)
+    rounded_duration = round(duration, 1)
+    if rounded_duration > max_duration:
         raise ValidationError(f"Duração máxima é {max_duration}s")
 
     return duration

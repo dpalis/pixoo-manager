@@ -7,19 +7,64 @@
 // Heartbeat - Keep server alive while browser is open
 // ============================================
 (function() {
-    // Send heartbeat every 30 seconds
-    setInterval(() => {
-        fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
-    }, 30000);
+    let consecutiveFailures = 0;
+    const MAX_FAILURES = 5;
+
+    async function sendHeartbeat() {
+        try {
+            const response = await fetch('/api/heartbeat', { method: 'POST' });
+            if (response.ok) {
+                consecutiveFailures = 0;
+            } else if (response.status === 429) {
+                // Rate limited - this is fine, server knows we're alive
+                console.debug('[Heartbeat] Rate limited, will retry');
+            } else {
+                consecutiveFailures++;
+                console.warn(`[Heartbeat] Server returned ${response.status}`);
+            }
+        } catch (error) {
+            consecutiveFailures++;
+            console.warn('[Heartbeat] Failed:', error.message);
+
+            // After multiple failures, warn user
+            if (consecutiveFailures >= MAX_FAILURES) {
+                console.error('[Heartbeat] Server may have disconnected');
+            }
+        }
+    }
+
+    // Send heartbeat every 20 seconds (more frequent for reliability)
+    setInterval(sendHeartbeat, 20000);
 
     // Send initial heartbeat immediately
-    fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+    sendHeartbeat();
+
+    // Also send heartbeat when page becomes visible (user returns to tab)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            sendHeartbeat();
+        }
+    });
 })();
 
 // ============================================
 // Utility Functions (Shared)
 // ============================================
 const utils = {
+    /**
+     * Detecta se a página foi recarregada (F5/refresh).
+     * Usado para limpar estado em refresh mas manter ao trocar de aba.
+     */
+    isPageReload() {
+        // Modern API (Performance Navigation Timing Level 2)
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries.length > 0) {
+            return navEntries[0].type === 'reload';
+        }
+        // Fallback for older browsers (deprecated but still works)
+        return performance.navigation && performance.navigation.type === 1;
+    },
+
     /**
      * Formata tempo em segundos para MM:SS.ms
      */
@@ -393,6 +438,14 @@ function mediaUpload() {
         },
 
         async restoreState() {
+            // Limpar estado em page reload (F5) para evitar confusão
+            // com arquivos temporários que podem não existir mais
+            if (utils.isPageReload()) {
+                console.log('[Media] Page reload detected, clearing state');
+                localStorage.removeItem('mediaUpload');
+                return;
+            }
+
             const saved = localStorage.getItem('mediaUpload');
             if (!saved) return;
 
@@ -882,6 +935,14 @@ function youtubeDownload() {
         },
 
         async restoreState() {
+            // Limpar estado em page reload (F5) para evitar confusão
+            // com arquivos temporários que podem não existir mais
+            if (utils.isPageReload()) {
+                console.log('[YouTube] Page reload detected, clearing state');
+                localStorage.removeItem('youtubeDownload');
+                return;
+            }
+
             const saved = localStorage.getItem('youtubeDownload');
             if (!saved) return;
 
