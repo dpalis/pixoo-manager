@@ -306,8 +306,10 @@ def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Imag
         Imagem com gamma corrigido
     """
     # Criar lookup table para performance
-    inv_gamma = 1.0 / gamma
-    lut = [int((i / 255.0) ** inv_gamma * 255.0) for i in range(256)]
+    # Fórmula: output = input^gamma
+    # gamma < 1.0 → clareia (levanta tons escuros)
+    # gamma > 1.0 → escurece
+    lut = [int((i / 255.0) ** gamma * 255.0) for i in range(256)]
 
     # Aplicar LUT a cada canal (RGB = 3 canais)
     return image.point(lut * 3)
