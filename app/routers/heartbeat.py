@@ -113,6 +113,7 @@ async def heartbeat(request: Request):
     check_rate_limit(_heartbeat_limiter, client_ip)
 
     timestamp = await _update_heartbeat()
+    print(f"[Heartbeat] Received from {client_ip}")
     return {"status": "ok", "timestamp": timestamp}
 
 
