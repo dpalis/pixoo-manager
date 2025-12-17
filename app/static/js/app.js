@@ -1023,8 +1023,8 @@ function youtubeDownload() {
         // YouTube Player - seek to time for slider preview
         seekToTime(time) {
             if (this.player && this.playerReady) {
+                // Just seek - the onStateChange handler will pause after frame loads
                 this.player.seekTo(time, true);
-                this.player.pauseVideo();
             }
         },
 
