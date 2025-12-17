@@ -1092,9 +1092,10 @@ function youtubeDownload() {
                                 this.playerTimeout = null;
                             }
                             this.playerReady = true;
-                            // Seek to start position
+                            // Seek to start position and ensure paused
                             if (this.player) {
                                 this.player.seekTo(this.startTime, true);
+                                this.player.pauseVideo();
                             }
                         },
                         onError: (e) => {
