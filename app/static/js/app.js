@@ -985,9 +985,12 @@ function youtubeDownload() {
                 this.endTimeStr = utils.formatTime(this.endTime);
 
                 // Initialize YouTube player for preview
+                // Use $nextTick to wait for Alpine to render the player container
                 const videoId = this.extractVideoId(this.url);
                 if (videoId) {
-                    this.initPlayer(videoId);
+                    this.$nextTick(() => {
+                        this.initPlayer(videoId);
+                    });
                 }
 
             } catch (e) {
@@ -1028,11 +1031,25 @@ function youtubeDownload() {
             // Destroy any existing player first
             this.destroyPlayer();
 
+            // Verify target element exists
+            const targetEl = document.getElementById('youtube-player');
+            if (!targetEl) {
+                console.warn('YouTube player target element not found');
+                return;
+            }
+
             // Wait for YouTube IFrame API to be ready
             if (!window.youtubeApiReady) {
                 await new Promise(resolve => {
                     window.addEventListener('youtube-api-ready', resolve, { once: true });
                 });
+            }
+
+            // Verify YT object exists
+            if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
+                console.warn('YouTube IFrame API not available');
+                this.playerError = true;
+                return;
             }
 
             // Create player
