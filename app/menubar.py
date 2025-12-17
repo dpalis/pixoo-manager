@@ -4,6 +4,7 @@ Menu bar integration for macOS.
 Provides a menu bar icon with options to open browser and quit the app.
 """
 
+import urllib.request
 import webbrowser
 
 
@@ -38,7 +39,7 @@ def create_menu_bar(server_url: str = "http://127.0.0.1:8000"):
             webbrowser.open(self.server_url)
 
         def quit_app(self, _):
-            """Quit the application with confirmation."""
+            """Quit the application with confirmation via graceful shutdown."""
             response = rumps.alert(
                 title="Encerrar Pixoo Manager?",
                 message="Conversões em andamento serão perdidas.",
@@ -46,7 +47,17 @@ def create_menu_bar(server_url: str = "http://127.0.0.1:8000"):
                 cancel="Cancelar"
             )
             if response == 1:  # OK clicked
-                rumps.quit_application()
+                # Chama endpoint de shutdown para cleanup gracioso
+                # (limpa temp files, desconecta Pixoo, etc.)
+                try:
+                    req = urllib.request.Request(
+                        f"{self.server_url}/api/system/shutdown",
+                        method="POST"
+                    )
+                    urllib.request.urlopen(req, timeout=2)
+                except Exception:
+                    # Fallback: quit direto se endpoint falhar
+                    rumps.quit_application()
 
     return PixooMenuBar()
 
