@@ -273,9 +273,23 @@
                 <!-- Info do video e player -->
                 <template x-if="videoInfo">
                     <div class="video-info-card">
-                        <!-- Sempre mostra thumbnail (embed do YouTube é muito instável) -->
+                        <!-- Player embed do YouTube ou thumbnail como fallback -->
                         <div class="youtube-player-container">
-                            <img :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
+                            <!-- Thumbnail (mostrar quando não pronto OU quando erro) -->
+                            <img
+                                :src="videoInfo.thumbnail"
+                                alt="Thumbnail"
+                                class="video-thumbnail"
+                                :class="{ 'hidden': playerReady && !playerError }"
+                            >
+                            <!-- Player YouTube (mostrar apenas quando pronto E sem erro) -->
+                            <div class="youtube-player-wrapper" :class="{ 'visible': playerReady && !playerError }">
+                                <!-- Target div created dynamically by initPlayer() -->
+                            </div>
+                            <!-- Mensagem de erro se embed não disponível -->
+                            <div x-show="playerError" class="player-error-badge">
+                                Preview indisponível
+                            </div>
                         </div>
                         <div class="video-details">
                             <h3 x-text="videoInfo.title"></h3>

@@ -886,6 +886,12 @@ function youtubeDownload() {
         sending: false,
         message: '',
         messageType: '',
+        // YouTube player state
+        player: null,
+        playerReady: false,
+        playerError: false,
+        playerTimeout: null,
+        playerId: 0,  // Unique ID for each player instance
 
         async init() {
             await this.restoreState();
@@ -980,6 +986,15 @@ function youtubeDownload() {
                 this.endTime = Math.min(this.videoInfo.max_duration, this.videoInfo.duration);
                 this.endTimeStr = utils.formatTime(this.endTime);
 
+                // Initialize YouTube player for preview
+                // Use $nextTick to wait for Alpine to render the player container
+                const videoId = this.extractVideoId(this.url);
+                if (videoId) {
+                    this.$nextTick(() => {
+                        this.initPlayer(videoId);
+                    });
+                }
+
             } catch (e) {
                 console.error('Erro:', e);
                 this.showMessage('Erro ao buscar video', 'error');
@@ -988,9 +1003,155 @@ function youtubeDownload() {
             }
         },
 
-        // Time management mixin delegate (no seekToTime - YouTube uses embed)
+        // Extract video ID from YouTube URL
+        extractVideoId(url) {
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&?/]+)/,
+            ];
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        },
+
+        // Time management mixin delegate
         getMaxDuration() {
             return this.videoInfo?.duration || 0;
+        },
+
+        // YouTube Player - seek to time for slider preview
+        seekToTime(time) {
+            if (this.player && this.playerReady) {
+                // Just seek - the onStateChange handler will pause after frame loads
+                this.player.seekTo(time, true);
+            }
+        },
+
+        // Initialize YouTube embedded player
+        async initPlayer(videoId) {
+            // Destroy any existing player first
+            this.destroyPlayer();
+
+            // Find wrapper and create fresh target element with unique ID
+            const wrapper = document.querySelector('.youtube-player-wrapper');
+            if (!wrapper) {
+                console.warn('YouTube player wrapper not found');
+                this.playerError = true;
+                return;
+            }
+
+            // Clear wrapper and create new target with unique ID
+            wrapper.innerHTML = '';
+            this.playerId++;
+            const targetId = `youtube-player-${this.playerId}`;
+            const targetEl = document.createElement('div');
+            targetEl.id = targetId;
+            wrapper.appendChild(targetEl);
+
+            // Wait for YouTube IFrame API to be ready (with timeout for offline scenarios)
+            if (!window.youtubeApiReady) {
+                try {
+                    await Promise.race([
+                        new Promise(resolve => {
+                            window.addEventListener('youtube-api-ready', resolve, { once: true });
+                        }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), 5000))
+                    ]);
+                } catch (e) {
+                    console.warn('YouTube API failed to load:', e.message);
+                    this.playerError = true;
+                    return;
+                }
+            }
+
+            // Verify YT object exists
+            if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
+                console.warn('YouTube IFrame API not available');
+                this.playerError = true;
+                return;
+            }
+
+            // Create player
+            try {
+                // Timeout: if video doesn't load in 8s, show error
+                this.playerTimeout = setTimeout(() => {
+                    if (!this.playerReady) {
+                        console.warn('YouTube player timeout - video not loading');
+                        this.playerError = true;
+                    }
+                }, 8000);
+
+                this.player = new YT.Player(targetId, {
+                    videoId: videoId,
+                    playerVars: {
+                        controls: 0,      // Hide controls
+                        disablekb: 1,     // Disable keyboard
+                        modestbranding: 1,
+                        rel: 0,           // No related videos
+                        mute: 1,          // Muted for autoplay
+                        playsinline: 1    // iOS inline playback
+                    },
+                    events: {
+                        onReady: () => {
+                            // Player API ready - mark as ready immediately
+                            if (this.playerTimeout) {
+                                clearTimeout(this.playerTimeout);
+                                this.playerTimeout = null;
+                            }
+                            this.playerReady = true;
+                            // Don't seek on load - just let it show first frame
+                            // Seek will happen when user moves slider
+                        },
+                        onStateChange: (event) => {
+                            // When video starts playing, pause after brief delay to show frame
+                            // NOTE: 100ms delay is required because YouTube IFrame API doesn't
+                            // provide a "frame rendered" callback. Pausing immediately after
+                            // seekTo() shows a black frame. This is a known API limitation.
+                            if (event.data === YT.PlayerState.PLAYING) {
+                                setTimeout(() => {
+                                    if (this.player) {
+                                        this.player.pauseVideo();
+                                    }
+                                }, 100);
+                            }
+                        },
+                        onError: (e) => {
+                            // Error codes: 2 = invalid param, 5 = HTML5 error,
+                            // 100 = not found, 101/150 = embed disabled
+                            if (this.playerTimeout) {
+                                clearTimeout(this.playerTimeout);
+                                this.playerTimeout = null;
+                            }
+                            console.warn('YouTube player error:', e.data);
+                            this.playerError = true;
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to create YouTube player:', e);
+                this.playerError = true;
+            }
+        },
+
+        // Destroy YouTube player
+        destroyPlayer() {
+            // Clear pending timeout
+            if (this.playerTimeout) {
+                clearTimeout(this.playerTimeout);
+                this.playerTimeout = null;
+            }
+
+            if (this.player) {
+                try {
+                    this.player.destroy();
+                } catch (e) {
+                    // Player might already be destroyed
+                }
+                this.player = null;
+            }
+            this.playerReady = false;
+            this.playerError = false;
         },
 
         async downloadAndConvert() {
@@ -1071,6 +1232,9 @@ function youtubeDownload() {
         },
 
         clearVideo() {
+            // Destroy YouTube player first
+            this.destroyPlayer();
+
             this.url = '';
             this.videoInfo = null;
             this.startTime = 0;

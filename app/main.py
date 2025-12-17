@@ -122,13 +122,14 @@ async def add_security_headers(request: Request, call_next):
     # frame-src para YouTube IFrame API
     # connect-src blob: necessário para Cropper.js processar imagens
     # media-src blob: necessário para preview de vídeo no Safari
+    # font-src data: necessário para fontes embutidas do YouTube embed
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https://i.ytimg.com https://*.ytimg.com; "
         "media-src 'self' blob:; "
-        "font-src 'self'; "
+        "font-src 'self' data:; "
         "connect-src 'self' blob:; "
         "frame-src https://www.youtube.com; "
         "frame-ancestors 'none'"
