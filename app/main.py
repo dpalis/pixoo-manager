@@ -35,8 +35,10 @@ from app.middleware import CSRFMiddleware
 # Modo headless (sem abrir browser) para testes/automação
 HEADLESS = os.getenv("PIXOO_HEADLESS", "false").lower() == "true"
 
-# Disable auto-shutdown for development (can be set via env var)
-AUTO_SHUTDOWN = os.getenv("PIXOO_AUTO_SHUTDOWN", "true").lower() == "true"
+# Auto-shutdown por inatividade desabilitado por padrão
+# Justificativa: menu bar permite encerrar manualmente a qualquer momento
+# Para reabilitar: PIXOO_AUTO_SHUTDOWN=true python -m app.main
+AUTO_SHUTDOWN = os.getenv("PIXOO_AUTO_SHUTDOWN", "false").lower() == "true"
 
 # Flag interna: quando True, browser é aberto pelo __main__, não pelo lifespan
 # Isso permite que o menubar controle quando abrir o browser
