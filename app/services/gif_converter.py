@@ -437,9 +437,11 @@ def create_global_palette(
     sample_image.putdata(all_pixels[:sample_size * sample_size])
 
     # Quantizar para obter paleta otimizada
+    # MAXCOVERAGE preserva melhor a diversidade de cores em cenas HDR/noturnas
+    # (céu escuro + luzes brilhantes) comparado com MEDIANCUT
     palette_image = sample_image.quantize(
         colors=num_colors,
-        method=Image.Quantize.MEDIANCUT  # Rápido e bom para animações
+        method=Image.Quantize.MAXCOVERAGE
     )
 
     return palette_image
