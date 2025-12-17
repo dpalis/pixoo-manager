@@ -7,10 +7,15 @@ O navegador abrirá automaticamente em http://127.0.0.1:8000
 
 import os
 import shutil
+import time
 import webbrowser
 from contextlib import asynccontextmanager
 
 import uvicorn
+
+# Session ID único para esta instância do servidor
+# Usado para invalidar estado do cliente quando o servidor reinicia
+SERVER_SESSION_ID = str(int(time.time()))
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -156,6 +161,7 @@ async def media_page(request: Request):
         "request": request,
         "active_tab": "media",
         "max_file_size": MAX_FILE_SIZE,
+        "session_id": SERVER_SESSION_ID,
     })
 
 
@@ -166,6 +172,7 @@ async def youtube_page(request: Request):
         "request": request,
         "active_tab": "youtube",
         "max_file_size": MAX_FILE_SIZE,
+        "session_id": SERVER_SESSION_ID,
     })
 
 

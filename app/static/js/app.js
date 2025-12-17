@@ -41,15 +41,28 @@
 })();
 
 // ============================================
-// Page Reload State Cleanup (F5 only)
+// Session-based State Management
 // ============================================
 (function() {
-    // Detectar tipo de navegação
+    // Obter session ID do servidor (muda quando servidor reinicia)
+    const serverSessionId = document.querySelector('meta[name="server-session-id"]')?.content;
+    const storedSessionId = localStorage.getItem('serverSessionId');
+
+    console.log('[App] Server session:', serverSessionId, '| Stored session:', storedSessionId);
+
+    // Se session ID mudou (servidor reiniciou), limpar todo o estado
+    if (serverSessionId && serverSessionId !== storedSessionId) {
+        console.log('[App] Session changed - clearing all state');
+        localStorage.removeItem('mediaUpload');
+        localStorage.removeItem('youtubeDownload');
+        localStorage.setItem('serverSessionId', serverSessionId);
+    }
+
+    // Também limpar em F5 (reload)
     const navEntries = performance.getEntriesByType('navigation');
     const navType = navEntries.length > 0 ? navEntries[0].type : 'unknown';
     console.log('[App] Navigation type:', navType);
 
-    // Limpar estado APENAS em reload (F5), não em navegação entre abas
     if (navType === 'reload') {
         console.log('[App] F5 detected - clearing all state');
         localStorage.removeItem('mediaUpload');
