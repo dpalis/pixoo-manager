@@ -272,12 +272,16 @@
                 <!-- Info do video e player -->
                 <template x-if="videoInfo">
                     <div class="video-info-card">
-                        <!-- Player YouTube (substituir thumbnail quando pronto) -->
+                        <!-- Player YouTube (ou thumbnail como fallback) -->
                         <div class="youtube-player-container">
-                            <div x-show="playerReady" :id="'youtube-player-' + videoInfo.id" class="youtube-player"></div>
-                            <img x-show="!playerReady && !playerError" :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
-                            <div x-show="playerError" class="player-error">
-                                Este vídeo não permite incorporação. Selecione o trecho e baixe diretamente.
+                            <!-- Player do YouTube (quando funciona) -->
+                            <div x-show="playerReady && !playerError" :id="'youtube-player-' + videoInfo.id" class="youtube-player"></div>
+                            <!-- Thumbnail como fallback (carregando ou erro) -->
+                            <div x-show="!playerReady || playerError" class="thumbnail-fallback">
+                                <img :src="videoInfo.thumbnail" alt="Thumbnail" class="video-thumbnail">
+                                <div x-show="playerError" class="player-error-overlay">
+                                    Preview indisponível
+                                </div>
                             </div>
                         </div>
                         <div class="video-details">
