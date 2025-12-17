@@ -59,10 +59,14 @@ const utils = {
         // Modern API (Performance Navigation Timing Level 2)
         const navEntries = performance.getEntriesByType('navigation');
         if (navEntries.length > 0) {
-            return navEntries[0].type === 'reload';
+            const navType = navEntries[0].type;
+            console.log('[Utils] Navigation type:', navType);
+            return navType === 'reload';
         }
         // Fallback for older browsers (deprecated but still works)
-        return performance.navigation && performance.navigation.type === 1;
+        const legacyType = performance.navigation?.type;
+        console.log('[Utils] Legacy navigation type:', legacyType);
+        return legacyType === 1;
     },
 
     /**
