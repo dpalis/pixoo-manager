@@ -19,6 +19,34 @@ from app.services.exceptions import ConversionError, TooManyFramesError
 from app.services.file_utils import create_temp_output
 from app.services.palette_manager import apply_palette_to_frames, create_global_palette
 
+# ============================================
+# Image Processing Constants
+# ============================================
+
+# Brightness detection threshold - images below this are considered "dark"
+DARK_IMAGE_THRESHOLD = 0.3
+
+# Gamma correction for dark images (< 1.0 = lighter)
+DARK_IMAGE_GAMMA = 0.6
+
+# Enhancement factors for dark images (gentler than defaults)
+DARK_IMAGE_CONTRAST = 1.15
+DARK_IMAGE_SATURATION = 1.1
+
+# Default enhancement factors for LED display
+DEFAULT_CONTRAST = 1.4
+DEFAULT_SATURATION = 1.3
+DEFAULT_SHARPNESS = 1.5
+DEFAULT_BRIGHTNESS_BOOST = 1.05
+
+# Dark halo removal parameters
+HALO_THRESHOLD = 35
+HALO_RADIUS = 1
+
+# Background darkening parameters
+BG_DARKEN_THRESHOLD = 140
+BG_DARKEN_FACTOR = 0.55
+
 
 @dataclass
 class ConvertOptions:
@@ -174,7 +202,7 @@ def adaptive_downscale(
     rgb_frame = smart_crop(rgb_frame, target_size)
 
     # Remover halos escuros (contornos indesejados)
-    cleaned = remove_dark_halos(rgb_frame, threshold=35, radius=1)
+    cleaned = remove_dark_halos(rgb_frame, threshold=HALO_THRESHOLD, radius=HALO_RADIUS)
 
     return cleaned
 
@@ -196,9 +224,9 @@ def enhance_contrast(image: Image.Image, factor: float = 1.1) -> Image.Image:
 
 def detect_brightness(image: Image.Image) -> float:
     """
-    Detecta brilho médio da imagem usando RMS (Root Mean Square).
+    Detecta brilho médio da imagem.
 
-    RMS é melhor que média simples porque considera variância.
+    Usa média simples (mais rápido que RMS, suficiente para threshold).
 
     Args:
         image: Imagem PIL (qualquer modo)
@@ -206,12 +234,9 @@ def detect_brightness(image: Image.Image) -> float:
     Returns:
         Brilho normalizado (0.0 a 1.0)
     """
-    # Converter para grayscale para cálculo de luminosidade
     grayscale = image.convert('L')
     stat = ImageStat.Stat(grayscale)
-
-    # RMS normalizado para 0-1
-    return stat.rms[0] / 255.0
+    return stat.mean[0] / 255.0
 
 
 def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Image:
@@ -239,9 +264,9 @@ def apply_gamma_correction(image: Image.Image, gamma: float = 0.7) -> Image.Imag
 
 def enhance_for_led_display(
     image: Image.Image,
-    contrast: float = 1.4,
-    saturation: float = 1.3,
-    sharpness: float = 1.5,
+    contrast: float = DEFAULT_CONTRAST,
+    saturation: float = DEFAULT_SATURATION,
+    sharpness: float = DEFAULT_SHARPNESS,
     auto_brightness: bool = True
 ) -> Image.Image:
     """
@@ -252,7 +277,7 @@ def enhance_for_led_display(
     - Aplica sharpening para definição
 
     Se auto_brightness=True, detecta brilho e ajusta parâmetros:
-    - Imagens escuras (brightness < 0.3): gamma correction + parâmetros suaves
+    - Imagens escuras: gamma correction + parâmetros suaves
     - Imagens normais: parâmetros padrão
 
     Args:
@@ -271,15 +296,13 @@ def enhance_for_led_display(
     if auto_brightness:
         brightness = detect_brightness(image)
 
-        if brightness < 0.3:  # Imagem escura
-            # Passo 1: Gamma correction para clarear tons escuros
-            img = apply_gamma_correction(img, gamma=0.6)
+        if brightness < DARK_IMAGE_THRESHOLD:
+            # Gamma correction para clarear tons escuros
+            img = apply_gamma_correction(img, gamma=DARK_IMAGE_GAMMA)
 
-            # Passo 2: Contraste mais suave (não esmagar tons)
-            contrast = 1.15
-
-            # Passo 3: Saturação reduzida (tons escuros ficam estranhos com alta saturação)
-            saturation = 1.1
+            # Parâmetros mais suaves para imagens escuras
+            contrast = DARK_IMAGE_CONTRAST
+            saturation = DARK_IMAGE_SATURATION
 
     # 1. Contraste - separa figura do fundo
     img = ImageEnhance.Contrast(img).enhance(contrast)
@@ -288,7 +311,7 @@ def enhance_for_led_display(
     img = ImageEnhance.Color(img).enhance(saturation)
 
     # 3. Brilho leve - compensa o contraste
-    img = ImageEnhance.Brightness(img).enhance(1.05)
+    img = ImageEnhance.Brightness(img).enhance(DEFAULT_BRIGHTNESS_BOOST)
 
     # 4. Sharpening - mais definição
     img = ImageEnhance.Sharpness(img).enhance(sharpness)
@@ -487,7 +510,7 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
 
     # Escurecer fundo para destacar figura clara
     if options.darken_bg:
-        converted = darken_background(converted, threshold=140, darken_factor=0.55)
+        converted = darken_background(converted, threshold=BG_DARKEN_THRESHOLD, darken_factor=BG_DARKEN_FACTOR)
 
     # Destacar centro da imagem
     if options.focus_center:
