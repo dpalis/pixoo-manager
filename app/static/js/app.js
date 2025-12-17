@@ -890,6 +890,7 @@ function youtubeDownload() {
         player: null,
         playerReady: false,
         playerError: false,
+        playerTimeout: null,
 
         async init() {
             await this.restoreState();
@@ -1032,10 +1033,19 @@ function youtubeDownload() {
             this.destroyPlayer();
 
             // Verify target element exists
-            const targetEl = document.getElementById('youtube-player');
+            let targetEl = document.getElementById('youtube-player');
             if (!targetEl) {
-                console.warn('YouTube player target element not found');
-                return;
+                // Try to create it
+                const wrapper = document.querySelector('.youtube-player-wrapper');
+                if (wrapper) {
+                    targetEl = document.createElement('div');
+                    targetEl.id = 'youtube-player';
+                    wrapper.appendChild(targetEl);
+                } else {
+                    console.warn('YouTube player wrapper not found');
+                    this.playerError = true;
+                    return;
+                }
             }
 
             // Wait for YouTube IFrame API to be ready
@@ -1055,7 +1065,7 @@ function youtubeDownload() {
             // Create player
             try {
                 // Timeout: if video doesn't load in 8s, show error
-                const timeout = setTimeout(() => {
+                this.playerTimeout = setTimeout(() => {
                     if (!this.playerReady) {
                         console.warn('YouTube player timeout - video not loading');
                         this.playerError = true;
@@ -1077,22 +1087,32 @@ function youtubeDownload() {
                         onReady: () => {
                             // Player API ready, but video might still be loading
                             // Start playback to trigger video loading
-                            this.player.playVideo();
+                            if (this.player) {
+                                this.player.playVideo();
+                            }
                         },
                         onStateChange: (event) => {
                             // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-                            if (event.data === YT.PlayerState.PLAYING) {
+                            if (event.data === YT.PlayerState.PLAYING && !this.playerReady) {
                                 // Video is actually playing - now we can seek
-                                clearTimeout(timeout);
+                                if (this.playerTimeout) {
+                                    clearTimeout(this.playerTimeout);
+                                    this.playerTimeout = null;
+                                }
                                 this.playerReady = true;
-                                this.player.seekTo(this.startTime, true);
-                                this.player.pauseVideo();
+                                if (this.player) {
+                                    this.player.seekTo(this.startTime, true);
+                                    this.player.pauseVideo();
+                                }
                             }
                         },
                         onError: (e) => {
                             // Error codes: 2 = invalid param, 5 = HTML5 error,
                             // 100 = not found, 101/150 = embed disabled
-                            clearTimeout(timeout);
+                            if (this.playerTimeout) {
+                                clearTimeout(this.playerTimeout);
+                                this.playerTimeout = null;
+                            }
                             console.warn('YouTube player error:', e.data);
                             this.playerError = true;
                         }
@@ -1106,6 +1126,12 @@ function youtubeDownload() {
 
         // Destroy YouTube player
         destroyPlayer() {
+            // Clear pending timeout
+            if (this.playerTimeout) {
+                clearTimeout(this.playerTimeout);
+                this.playerTimeout = null;
+            }
+
             if (this.player) {
                 try {
                     this.player.destroy();
@@ -1116,14 +1142,6 @@ function youtubeDownload() {
             }
             this.playerReady = false;
             this.playerError = false;
-
-            // Recreate the target div (YouTube API removes it on destroy)
-            const wrapper = document.querySelector('.youtube-player-wrapper');
-            if (wrapper && !document.getElementById('youtube-player')) {
-                const newTarget = document.createElement('div');
-                newTarget.id = 'youtube-player';
-                wrapper.appendChild(newTarget);
-            }
         },
 
         async downloadAndConvert() {
