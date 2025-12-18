@@ -138,8 +138,20 @@ async def upload_media(file: UploadFile = File(...)):
 
     try:
         if is_image:
-            # Converter imagem para 64x64
-            output_path, metadata = convert_image(temp_path)
+            # Verificar se é imagem animada (GIF ou WebP animado)
+            from PIL import Image
+            from app.services.gif_converter import convert_gif, ConvertOptions
+
+            with Image.open(temp_path) as img:
+                is_animated = hasattr(img, 'n_frames') and img.n_frames > 1
+
+            # Usar função apropriada para imagem estática ou animada
+            options = ConvertOptions(led_optimize=True)
+            if is_animated:
+                output_path, metadata = convert_gif(temp_path, options)
+            else:
+                output_path, metadata = convert_image(temp_path, options)
+
             cleanup_files([temp_path])
 
             media_uploads.set(upload_id, {

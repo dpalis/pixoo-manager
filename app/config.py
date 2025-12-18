@@ -18,8 +18,9 @@ PREVIEW_SCALE = 64          # Escala max do preview (64 * 64 = 4096px)
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB em bytes
 
 # Tipos de arquivo permitidos
-ALLOWED_GIF_TYPES = ["image/gif"]
-ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif"]
+# Note: WebP can be animated, so it's in both GIF and IMAGE types
+ALLOWED_GIF_TYPES = ["image/gif", "image/webp"]
+ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
 
 # Diretórios

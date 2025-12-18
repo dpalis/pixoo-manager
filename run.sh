@@ -14,21 +14,25 @@ cd "$PROJECT_DIR"
 echo "🚀 Iniciando Pixoo Manager..."
 echo ""
 
-# Verificar se venv existe
-if [ ! -d "venv" ]; then
+# Verificar se venv existe (.venv ou venv)
+if [ -d ".venv" ]; then
+    VENV_DIR=".venv"
+elif [ -d "venv" ]; then
+    VENV_DIR="venv"
+else
     echo "❌ Virtualenv não encontrado"
     echo ""
     echo "Para criar:"
-    echo "  python3 -m venv venv"
-    echo "  source venv/bin/activate"
+    echo "  python3 -m venv .venv"
+    echo "  source .venv/bin/activate"
     echo "  pip install -r requirements.txt"
     echo ""
     exit 1
 fi
 
 # Ativar virtualenv
-echo "📦 Ativando virtualenv..."
-source venv/bin/activate
+echo "📦 Ativando virtualenv ($VENV_DIR)..."
+source "$VENV_DIR/bin/activate"
 
 # Verificar dependências
 if ! python -c "import fastapi" 2>/dev/null; then

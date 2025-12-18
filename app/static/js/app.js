@@ -534,11 +534,13 @@ function mediaUpload() {
         },
 
         async processFile(file) {
-            const gifTypes = ['image/gif'];
-            const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+            // GIF and WebP may be animated - upload directly without crop
+            const animatedTypes = ['image/gif', 'image/webp'];
+            // Static images show cropper first
+            const imageTypes = ['image/png', 'image/jpeg'];
             const videoTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
 
-            const isGif = gifTypes.includes(file.type);
+            const isGif = animatedTypes.includes(file.type);
             const isImage = imageTypes.includes(file.type);
             const isVideo = videoTypes.includes(file.type);
 
