@@ -1,18 +1,14 @@
 """
 Servico de download de videos do YouTube.
 
-Usa yt-dlp para baixar trechos de video e converter para GIF.
+Usa yt-dlp Python API para baixar trechos de video e converter para GIF.
 """
 
-import json
-import shutil
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
-from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, YTDLP_PATH
+from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
 from app.services.video_converter import convert_video_to_gif
 from app.services.gif_converter import ConvertOptions
@@ -22,39 +18,18 @@ from app.services.validators import (
     is_youtube_shorts,
 )
 
+# Importar yt_dlp uma vez no modulo (evita reimportar a cada chamada)
+try:
+    import yt_dlp
+    _YTDLP_AVAILABLE = True
+except ImportError:
+    _YTDLP_AVAILABLE = False
 
-def _get_ytdlp_command() -> List[str]:
-    """
-    Retorna o comando yt-dlp como lista de argumentos.
 
-    Prioridade:
-    1. Binario bundled em bin/yt-dlp
-    2. yt-dlp instalado no sistema (CLI)
-    3. yt_dlp como modulo Python (py2app bundle)
-
-    Returns:
-        Lista de argumentos para subprocess (ex: ["yt-dlp"] ou [sys.executable, "-m", "yt_dlp"])
-
-    Raises:
-        FileNotFoundError: Se yt-dlp nao for encontrado
-    """
-    # Tentar bundled primeiro
-    if YTDLP_PATH.exists():
-        return [str(YTDLP_PATH)]
-
-    # Fallback para sistema
-    system_ytdlp = shutil.which("yt-dlp")
-    if system_ytdlp:
-        return [system_ytdlp]
-
-    # Fallback para modulo Python (funciona em py2app bundle)
-    try:
-        import yt_dlp
-        return [sys.executable, "-m", "yt_dlp"]
-    except ImportError:
-        pass
-
-    raise FileNotFoundError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
+def _check_ytdlp():
+    """Verifica se yt_dlp esta disponivel."""
+    if not _YTDLP_AVAILABLE:
+        raise ConversionError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
 
 
 @dataclass
@@ -73,7 +48,7 @@ def validate_youtube_url(url: str) -> str:
     """
     Valida e extrai o ID do video do YouTube.
 
-    Usa validação rigorosa para prevenir command injection.
+    Usa validacao rigorosa para prevenir command injection.
 
     Args:
         url: URL do YouTube
@@ -94,6 +69,8 @@ def get_youtube_info(url: str) -> YouTubeInfo:
     """
     Obtem informacoes do video sem baixar.
 
+    Usa yt_dlp Python API diretamente (mais rapido que subprocess).
+
     Args:
         url: URL do YouTube
 
@@ -103,26 +80,25 @@ def get_youtube_info(url: str) -> YouTubeInfo:
     Raises:
         ConversionError: Se nao conseguir obter info
     """
+    _check_ytdlp()
     video_id = validate_youtube_url(url)
 
     try:
-        ytdlp_cmd = _get_ytdlp_command()
-        result = subprocess.run(
-            ytdlp_cmd + [
-                "--dump-json",
-                "--no-download",
-                "--no-warnings",
-                f"https://www.youtube.com/watch?v={video_id}"
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'noplaylist': True,
+        }
 
-        if result.returncode != 0:
-            raise ConversionError(f"Erro ao obter info do video: {result.stderr}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(
+                f"https://www.youtube.com/watch?v={video_id}",
+                download=False
+            )
 
-        info = json.loads(result.stdout)
+        if not info:
+            raise ConversionError("Nao foi possivel obter informacoes do video")
 
         return YouTubeInfo(
             id=video_id,
@@ -134,12 +110,8 @@ def get_youtube_info(url: str) -> YouTubeInfo:
             height=info.get("height", 0) or 0
         )
 
-    except subprocess.TimeoutExpired:
-        raise ConversionError("Timeout ao obter info do video")
-    except json.JSONDecodeError:
-        raise ConversionError("Erro ao processar resposta do yt-dlp")
-    except FileNotFoundError as e:
-        raise ConversionError(str(e))
+    except yt_dlp.DownloadError as e:
+        raise ConversionError(f"Erro ao obter info do video: {e}")
     except Exception as e:
         raise ConversionError(f"Erro ao obter info: {e}")
 
@@ -152,6 +124,8 @@ def download_youtube_segment(
 ) -> Path:
     """
     Baixa um trecho do video do YouTube.
+
+    Usa yt_dlp Python API com download_ranges para baixar apenas o trecho.
 
     Args:
         url: URL do YouTube
@@ -166,7 +140,9 @@ def download_youtube_segment(
         VideoTooLongError: Se o trecho for maior que o limite permitido
         ConversionError: Se o download falhar
     """
-    # Sanitiza valores de tempo para prevenir command injection
+    _check_ytdlp()
+
+    # Sanitiza valores de tempo
     try:
         start = sanitize_time_value(start, max_duration=36000.0)  # Max 10h
         end = sanitize_time_value(end, max_duration=36000.0)
@@ -175,10 +151,9 @@ def download_youtube_segment(
 
     duration = end - start
 
-    # Validar duração baseado no tipo de vídeo
+    # Validar duracao baseado no tipo de video
     shorts = is_youtube_shorts(url)
     max_duration = MAX_SHORTS_DURATION if shorts else MAX_VIDEO_DURATION
-    # Arredondar para 1 casa decimal para evitar erros de ponto flutuante
     rounded_duration = round(duration, 1)
     if rounded_duration > max_duration:
         raise VideoTooLongError(
@@ -190,105 +165,87 @@ def download_youtube_segment(
 
     video_id = validate_youtube_url(url)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Baixar video e cortar com moviepy
+    # (yt_dlp Python API é rapida, download_ranges tem API instavel)
+    return _download_and_trim(video_id, start, end, progress_callback)
+
+
+def _download_and_trim(
+    video_id: str,
+    start: float,
+    end: float,
+    progress_callback: Optional[callable] = None
+) -> Path:
+    """
+    Baixa video e corta o trecho com moviepy.
+
+    Usa yt_dlp Python API (rapido) + moviepy para corte.
+    """
+    full_video_path = TEMP_DIR / f"yt_{video_id}_full.mp4"
     output_path = TEMP_DIR / f"yt_{video_id}_{start:.0f}_{end:.0f}.mp4"
 
-    # Formatar tempos para yt-dlp
-    def format_time(seconds):
-        h = int(seconds // 3600)
-        m = int((seconds % 3600) // 60)
-        s = seconds % 60
-        return f"{h:02d}:{m:02d}:{s:06.3f}"
-
     try:
-        ytdlp_cmd = _get_ytdlp_command()
-
         if progress_callback:
             progress_callback("downloading", 0)
 
-        result = subprocess.run(
-            ytdlp_cmd + [
-                "-f", "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--download-sections", f"*{format_time(start)}-{format_time(end)}",
-                "--force-keyframes-at-cuts",
-                "-o", str(output_path),
-                "--no-warnings",
-                "--no-playlist",
-                f"https://www.youtube.com/watch?v={video_id}"
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
+        # Progress hook para yt-dlp
+        def progress_hook(d):
+            if progress_callback and d.get('status') == 'downloading':
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                downloaded = d.get('downloaded_bytes', 0)
+                if total > 0:
+                    pct = (downloaded / total) * 80  # 80% para download
+                    progress_callback("downloading", pct)
+
+        ydl_opts = {
+            'format': 'best[ext=mp4][height<=720]/best[ext=mp4]/best',
+            'outtmpl': str(full_video_path),
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'progress_hooks': [progress_hook],
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+
+        # Verificar se arquivo existe
+        if not full_video_path.exists():
+            possible_files = list(TEMP_DIR.glob(f"yt_{video_id}_full.*"))
+            if possible_files:
+                full_video_path = possible_files[0]
+            else:
+                raise ConversionError("Arquivo de video nao foi criado")
+
+        if progress_callback:
+            progress_callback("downloading", 85)
+
+        # Cortar o trecho desejado usando moviepy
+        from moviepy import VideoFileClip
+        with VideoFileClip(str(full_video_path)) as clip:
+            actual_end = min(end, clip.duration)
+            trimmed = clip.subclipped(start, actual_end)
+            trimmed.write_videofile(
+                str(output_path),
+                codec="libx264",
+                audio_codec="aac",
+                logger=None
+            )
 
         if progress_callback:
             progress_callback("downloading", 100)
 
-        if result.returncode != 0:
-            # Tentar metodo alternativo sem --download-sections
-            # (para versoes mais antigas do yt-dlp)
-            # Baixa o video completo e depois corta com moviepy
-            full_video_path = TEMP_DIR / f"yt_{video_id}_full.mp4"
-
-            result = subprocess.run(
-                ytdlp_cmd + [
-                    "-f", "best[ext=mp4]/best",
-                    "-o", str(full_video_path),
-                    "--no-warnings",
-                    "--no-playlist",
-                    f"https://www.youtube.com/watch?v={video_id}"
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-
-            if result.returncode != 0:
-                raise ConversionError(f"Erro no download: {result.stderr}")
-
-            # Verificar se arquivo existe (yt-dlp pode mudar extensao)
-            if not full_video_path.exists():
-                possible_files = list(TEMP_DIR.glob(f"yt_{video_id}_full.*"))
-                if possible_files:
-                    full_video_path = possible_files[0]
-                else:
-                    raise ConversionError("Arquivo de video nao foi criado")
-
-            # Cortar o trecho desejado usando moviepy
-            try:
-                from moviepy import VideoFileClip
-                with VideoFileClip(str(full_video_path)) as clip:
-                    # Ajustar end se for maior que a duracao do video
-                    actual_end = min(end, clip.duration)
-                    trimmed = clip.subclipped(start, actual_end)
-                    trimmed.write_videofile(
-                        str(output_path),
-                        codec="libx264",
-                        audio_codec="aac",
-                        logger=None  # Suprimir output
-                    )
-            finally:
-                # Limpar video completo
-                if full_video_path.exists():
-                    full_video_path.unlink()
-
-        if not output_path.exists():
-            # yt-dlp pode adicionar extensao diferente
-            possible_files = list(TEMP_DIR.glob(f"yt_{video_id}_{start:.0f}_{end:.0f}.*"))
-            if possible_files:
-                output_path = possible_files[0]
-            else:
-                raise ConversionError("Arquivo de video nao foi criado")
-
         return output_path
 
-    except subprocess.TimeoutExpired:
-        raise ConversionError("Timeout no download do video")
-    except FileNotFoundError as e:
-        raise ConversionError(str(e))
-    except ConversionError:
-        raise
+    except yt_dlp.DownloadError as e:
+        raise ConversionError(f"Erro no download: {e}")
     except Exception as e:
         raise ConversionError(f"Erro no download: {e}")
+    finally:
+        # Limpar video completo
+        if full_video_path.exists():
+            full_video_path.unlink()
 
 
 def download_and_convert_youtube(
@@ -328,7 +285,6 @@ def download_and_convert_youtube(
                 progress_callback(phase, 40 + progress * 0.6)
 
         # Converter para GIF
-        # O video ja esta cortado, entao converter do inicio ao fim
         from moviepy import VideoFileClip
         with VideoFileClip(str(video_path)) as clip:
             video_duration = clip.duration
