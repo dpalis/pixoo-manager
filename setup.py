@@ -20,6 +20,7 @@ DATA_FILES = [
         "app/static/vendor/cropper.min.js",
         "app/static/vendor/cropper.min.css",
     ]),
+    ("bin", ["bin/ffmpeg"]),
 ]
 
 OPTIONS = {
