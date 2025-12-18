@@ -173,11 +173,16 @@ const timeManagementMixin = {
 };
 
 // ============================================
-// Precision Slider Component (Lerp-based smooth movement)
+// Precision Slider Component (1:1 mapping + keyboard arrows)
 // ============================================
 /**
  * Factory function that creates a precision slider component.
- * Uses lerp interpolation for smooth, fluid movement like macOS native sliders.
+ * Uses direct 1:1 mouse mapping with keyboard arrows for fine adjustment.
+ *
+ * Controls:
+ * - Mouse drag: Direct 1:1 positioning
+ * - ← / →: Adjust by ±0.5 second
+ * - Shift + ← / →: Adjust by ±5 seconds
  *
  * @param {Object} parentComponent - Reference to the parent Alpine component
  *                                   (must have startTime, endTime, startTimeStr, endTimeStr,
@@ -187,15 +192,9 @@ function precisionSlider(parentComponent) {
     return {
         // Estado
         dragging: null,           // 'start' | 'end' | null
+        lastActiveHandle: null,   // 'start' | 'end' | null - receives keyboard adjustments
         sliderRect: null,         // Bounding rect do slider
-        animationId: null,        // requestAnimationFrame ID
-        targetPercent: 0,         // Posição alvo (onde o mouse está)
-        currentPercent: 0,        // Posição atual (com lerp)
-
-        // Configuração
-        config: {
-            lerpFactor: 0.25,     // 0-1: maior = mais responsivo, menor = mais suave
-        },
+        dragOffset: 0,            // Offset entre mouse e centro do handle no início do drag
 
         // Referência ao componente pai
         parent: parentComponent,
@@ -219,88 +218,101 @@ function precisionSlider(parentComponent) {
         init() {
             this._onDrag = this.onDrag.bind(this);
             this._endDrag = this.endDrag.bind(this);
-            this._animate = this.animate.bind(this);
-        },
-
-        // Linear interpolation
-        lerp(a, b, t) {
-            return a + (b - a) * t;
         },
 
         // Iniciar drag
         startDrag(event, handle) {
             event.preventDefault();
             this.dragging = handle;
-            this.sliderRect = this.$el.getBoundingClientRect();
+            this.lastActiveHandle = handle;
 
-            // Inicializar posição atual
-            this.currentPercent = handle === 'start' ? this.startPercent : this.endPercent;
-            this.targetPercent = this.currentPercent;
+            // Pegar o container .precision-slider (pai do handle clicado)
+            const sliderContainer = event.target.closest('.precision-slider');
+            this.sliderRect = sliderContainer.getBoundingClientRect();
+
+            // Calcular offset: diferença entre onde o mouse clicou e onde o handle está
+            const mouseX = event.clientX - this.sliderRect.left;
+            const currentPercent = handle === 'start' ? this.startPercent : this.endPercent;
+            const handleX = (currentPercent / 100) * this.sliderRect.width;
+            this.dragOffset = mouseX - handleX;
+
+            // Focus no slider para receber eventos de teclado
+            sliderContainer.focus();
 
             // Listeners globais
             document.addEventListener('mousemove', this._onDrag);
             document.addEventListener('mouseup', this._endDrag);
-
-            // Iniciar animation loop
-            this.animate();
         },
 
-        // Handler de movimento - apenas atualiza o target
+        // Handler de movimento - mapeamento 1:1 direto com offset
         onDrag(event) {
             if (!this.dragging || !this.sliderRect) return;
 
-            // Calcular posição do mouse relativa ao slider
-            const mouseX = event.clientX - this.sliderRect.left;
-            const percent = Math.max(0, Math.min(100, (mouseX / this.sliderRect.width) * 100));
-
-            this.targetPercent = percent;
-        },
-
-        // Animation loop - interpola suavemente para o target
-        animate() {
-            if (!this.dragging) return;
-
-            // Lerp da posição atual para o target
-            this.currentPercent = this.lerp(this.currentPercent, this.targetPercent, this.config.lerpFactor);
-
-            // Converter percent para tempo
+            // Calcular posição do mouse relativa ao slider, compensando o offset inicial
+            const mouseX = event.clientX - this.sliderRect.left - this.dragOffset;
+            const percent = Math.max(0, Math.min(1, mouseX / this.sliderRect.width));
             const duration = this.parent.getMaxDuration();
-            const time = (this.currentPercent / 100) * duration;
+            const newTime = percent * duration;
 
             // Aplicar com limites
             if (this.dragging === 'start') {
-                const newTime = Math.max(0, Math.min(time, this.parent.endTime - 1));
-                if (Math.abs(newTime - this.parent.startTime) > 0.01) {
-                    this.parent.startTime = newTime;
-                    this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
-                    if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
-                }
+                // Não ultrapassar o handle de fim (mínimo 1s de diferença)
+                this.parent.startTime = Math.max(0, Math.min(newTime, this.parent.endTime - 1));
+                this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
             } else {
-                const newTime = Math.max(this.parent.startTime + 1, Math.min(time, duration));
-                if (Math.abs(newTime - this.parent.endTime) > 0.01) {
-                    this.parent.endTime = newTime;
-                    this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
-                    if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
-                }
+                // Não ficar antes do handle de início
+                this.parent.endTime = Math.max(this.parent.startTime + 1, Math.min(newTime, duration));
+                this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
             }
-
-            // Continuar animação
-            this.animationId = requestAnimationFrame(this._animate);
         },
 
         // Finalizar drag
         endDrag() {
             this.dragging = null;
 
-            // Cancelar animation loop
-            if (this.animationId) {
-                cancelAnimationFrame(this.animationId);
-                this.animationId = null;
-            }
-
             // Remover listeners
             document.removeEventListener('mousemove', this._onDrag);
             document.removeEventListener('mouseup', this._endDrag);
+        },
+
+        // Ajuste via setas do teclado
+        adjustTime(delta) {
+            if (!this.lastActiveHandle) {
+                // Se nenhum handle foi selecionado, selecionar o de início
+                this.lastActiveHandle = 'start';
+            }
+
+            const duration = this.parent.getMaxDuration();
+
+            if (this.lastActiveHandle === 'start') {
+                const newTime = this.parent.startTime + delta;
+                // Limites: >= 0 e < endTime - 1
+                this.parent.startTime = Math.max(0, Math.min(newTime, this.parent.endTime - 1));
+                this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
+            } else {
+                const newTime = this.parent.endTime + delta;
+                // Limites: > startTime + 1 e <= duration
+                this.parent.endTime = Math.max(this.parent.startTime + 1, Math.min(newTime, duration));
+                this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
+            }
+        },
+
+        // Handler de teclado
+        handleKeydown(event) {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+            event.preventDefault();
+            const delta = event.shiftKey ? 5 : 0.2;
+
+            if (event.key === 'ArrowLeft') {
+                this.adjustTime(-delta);
+            } else {
+                this.adjustTime(delta);
+            }
         }
     };
 }

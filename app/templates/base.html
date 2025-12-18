@@ -169,19 +169,22 @@
                             </div>
 
                             <!-- Precision Slider -->
-                            <div class="precision-slider" x-data="precisionSlider($data)">
+                            <div class="precision-slider"
+                                 x-data="precisionSlider($data)"
+                                 tabindex="0"
+                                 @keydown="handleKeydown($event)">
                                 <div class="slider-track"></div>
                                 <div class="slider-selection"
                                      :style="`left: ${startPercent}%; width: ${selectionWidth}%`">
                                 </div>
                                 <div class="slider-handle slider-handle-start"
                                      :style="`left: ${startPercent}%`"
-                                     :class="{ 'dragging': dragging === 'start' }"
+                                     :class="{ 'dragging': dragging === 'start', 'active': lastActiveHandle === 'start' }"
                                      @mousedown="startDrag($event, 'start')">
                                 </div>
                                 <div class="slider-handle slider-handle-end"
                                      :style="`left: ${endPercent}%`"
-                                     :class="{ 'dragging': dragging === 'end' }"
+                                     :class="{ 'dragging': dragging === 'end', 'active': lastActiveHandle === 'end' }"
                                      @mousedown="startDrag($event, 'end')">
                                 </div>
                             </div>
@@ -311,19 +314,22 @@
                         </div>
 
                         <!-- Precision Slider -->
-                        <div class="precision-slider" x-data="precisionSlider($data)">
+                        <div class="precision-slider"
+                             x-data="precisionSlider($data)"
+                             tabindex="0"
+                             @keydown="handleKeydown($event)">
                             <div class="slider-track"></div>
                             <div class="slider-selection"
                                  :style="`left: ${startPercent}%; width: ${selectionWidth}%`">
                             </div>
                             <div class="slider-handle slider-handle-start"
                                  :style="`left: ${startPercent}%`"
-                                 :class="{ 'dragging': dragging === 'start' }"
+                                 :class="{ 'dragging': dragging === 'start', 'active': lastActiveHandle === 'start' }"
                                  @mousedown="startDrag($event, 'start')">
                             </div>
                             <div class="slider-handle slider-handle-end"
                                  :style="`left: ${endPercent}%`"
-                                 :class="{ 'dragging': dragging === 'end' }"
+                                 :class="{ 'dragging': dragging === 'end', 'active': lastActiveHandle === 'end' }"
                                  @mousedown="startDrag($event, 'end')">
                             </div>
                         </div>
