@@ -7,9 +7,10 @@ Usa yt-dlp para baixar trechos de video e converter para GIF.
 import json
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, YTDLP_PATH
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
@@ -22,28 +23,36 @@ from app.services.validators import (
 )
 
 
-def _get_ytdlp_command() -> str:
+def _get_ytdlp_command() -> List[str]:
     """
-    Retorna o comando yt-dlp (bundled ou sistema).
+    Retorna o comando yt-dlp como lista de argumentos.
 
     Prioridade:
     1. Binario bundled em bin/yt-dlp
-    2. yt-dlp instalado no sistema
+    2. yt-dlp instalado no sistema (CLI)
+    3. yt_dlp como modulo Python (py2app bundle)
 
     Returns:
-        Caminho para o executavel yt-dlp
+        Lista de argumentos para subprocess (ex: ["yt-dlp"] ou [sys.executable, "-m", "yt_dlp"])
 
     Raises:
         FileNotFoundError: Se yt-dlp nao for encontrado
     """
     # Tentar bundled primeiro
     if YTDLP_PATH.exists():
-        return str(YTDLP_PATH)
+        return [str(YTDLP_PATH)]
 
     # Fallback para sistema
     system_ytdlp = shutil.which("yt-dlp")
     if system_ytdlp:
-        return system_ytdlp
+        return [system_ytdlp]
+
+    # Fallback para modulo Python (funciona em py2app bundle)
+    try:
+        import yt_dlp
+        return [sys.executable, "-m", "yt_dlp"]
+    except ImportError:
+        pass
 
     raise FileNotFoundError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
 
@@ -99,8 +108,7 @@ def get_youtube_info(url: str) -> YouTubeInfo:
     try:
         ytdlp_cmd = _get_ytdlp_command()
         result = subprocess.run(
-            [
-                ytdlp_cmd,
+            ytdlp_cmd + [
                 "--dump-json",
                 "--no-download",
                 "--no-warnings",
@@ -198,8 +206,7 @@ def download_youtube_segment(
             progress_callback("downloading", 0)
 
         result = subprocess.run(
-            [
-                ytdlp_cmd,
+            ytdlp_cmd + [
                 "-f", "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                 "--download-sections", f"*{format_time(start)}-{format_time(end)}",
                 "--force-keyframes-at-cuts",
@@ -223,8 +230,7 @@ def download_youtube_segment(
             full_video_path = TEMP_DIR / f"yt_{video_id}_full.mp4"
 
             result = subprocess.run(
-                [
-                    ytdlp_cmd,
+                ytdlp_cmd + [
                     "-f", "best[ext=mp4]/best",
                     "-o", str(full_video_path),
                     "--no-warnings",

@@ -26,7 +26,8 @@ requests>=2.31.0
 rumps>=0.4.0
 
 # Build
-pyinstaller>=6.0.0
+py2app>=0.28.0
+httptools>=0.6.0
 
 # Testes
 pytest>=8.0.0
