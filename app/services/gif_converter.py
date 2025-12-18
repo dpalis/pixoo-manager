@@ -27,7 +27,8 @@ from app.services.palette_manager import apply_palette_to_frames, create_global_
 DARK_IMAGE_THRESHOLD = 0.3
 
 # Gamma correction for dark images (< 1.0 = lighter)
-DARK_IMAGE_GAMMA = 0.6
+# 0.75 provides good balance: brightens without "washing out"
+DARK_IMAGE_GAMMA = 0.75
 
 # Enhancement factors for dark images (gentler than defaults)
 DARK_IMAGE_CONTRAST = 1.15
