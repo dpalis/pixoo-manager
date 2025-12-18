@@ -6,11 +6,19 @@ Implementa abordagem hibrida com 3 metodos em cascata para download parcial.
 """
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, FFMPEG_PATH
+
+# Adicionar FFmpeg ao PATH para que yt-dlp consiga encontrar
+if FFMPEG_PATH.exists():
+    ffmpeg_dir = str(FFMPEG_PATH.parent)
+    current_path = os.environ.get("PATH", "")
+    if ffmpeg_dir not in current_path:
+        os.environ["PATH"] = f"{ffmpeg_dir}:{current_path}"
 
 logger = logging.getLogger(__name__)
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError
@@ -191,32 +199,31 @@ def _download_and_trim(
     """
     segment_duration = end - start
 
-    # Metodo 1: FFmpeg External Downloader
+    # Metodo 1: download_ranges API (mais confiavel)
     try:
-        logger.info(f"Tentando Metodo 1 (FFmpeg external) para {video_id}")
-        result = _try_ffmpeg_download(video_id, start, end, progress_callback)
-        if _verify_segment_download(result, segment_duration):
-            logger.info("Metodo 1 (FFmpeg) bem-sucedido")
-            return result
-        logger.warning("Metodo 1: arquivo invalido, tentando proximo")
-    except (FileNotFoundError, OSError) as e:
-        logger.warning(f"Metodo 1 (FFmpeg) falhou: {e}")
-    except Exception as e:
-        # yt_dlp.DownloadError e outros
-        logger.warning(f"Metodo 1 (FFmpeg) falhou: {e}")
-
-    # Metodo 2: download_ranges API
-    try:
-        logger.info(f"Tentando Metodo 2 (download_ranges) para {video_id}")
+        logger.info(f"Tentando Metodo 1 (download_ranges) para {video_id}")
         result = _try_download_ranges(video_id, start, end, progress_callback)
         if _verify_segment_download(result, segment_duration):
-            logger.info("Metodo 2 (download_ranges) bem-sucedido")
+            logger.info("Metodo 1 (download_ranges) bem-sucedido")
+            return result
+        logger.warning("Metodo 1: arquivo invalido, tentando proximo")
+    except ImportError as e:
+        logger.warning(f"Metodo 1 (download_ranges) falhou - import: {e}")
+    except Exception as e:
+        logger.warning(f"Metodo 1 (download_ranges) falhou: {e}")
+
+    # Metodo 2: FFmpeg External Downloader (fallback)
+    try:
+        logger.info(f"Tentando Metodo 2 (FFmpeg external) para {video_id}")
+        result = _try_ffmpeg_download(video_id, start, end, progress_callback)
+        if _verify_segment_download(result, segment_duration):
+            logger.info("Metodo 2 (FFmpeg) bem-sucedido")
             return result
         logger.warning("Metodo 2: arquivo invalido, tentando proximo")
-    except ImportError as e:
-        logger.warning(f"Metodo 2 (download_ranges) falhou - import: {e}")
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"Metodo 2 (FFmpeg) falhou: {e}")
     except Exception as e:
-        logger.warning(f"Metodo 2 (download_ranges) falhou: {e}")
+        logger.warning(f"Metodo 2 (FFmpeg) falhou: {e}")
 
     # Metodo 3: Full download + MoviePy trim (fallback final)
     logger.info(f"Usando Metodo 3 (fallback) para {video_id}")
