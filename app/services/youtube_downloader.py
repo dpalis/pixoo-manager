@@ -193,8 +193,8 @@ def _download_and_trim(
     Baixa trecho de video usando abordagem hibrida.
 
     Tenta em ordem:
-    1. FFmpeg external downloader (mais rapido)
-    2. download_ranges API (fallback)
+    1. download_ranges API (mais confiavel)
+    2. FFmpeg external downloader (fallback)
     3. Download completo + MoviePy trim (fallback final)
     """
     segment_duration = end - start
@@ -237,7 +237,7 @@ def _try_ffmpeg_download(
     progress_callback: Optional[callable] = None
 ) -> Path:
     """
-    Metodo 1: Download parcial com FFmpeg external downloader.
+    Metodo 2: Download parcial com FFmpeg external downloader.
 
     Usa ffmpeg_i args para aplicar -ss e -to ANTES do -i,
     permitindo trimming durante o download.
@@ -292,7 +292,7 @@ def _try_download_ranges(
     progress_callback: Optional[callable] = None
 ) -> Path:
     """
-    Metodo 2: Download parcial com download_ranges API do yt-dlp.
+    Metodo 1: Download parcial com download_ranges API do yt-dlp.
 
     Usa download_range_func para especificar o trecho desejado.
     Inclui workaround para bug de arquivo vazio com HLS.
