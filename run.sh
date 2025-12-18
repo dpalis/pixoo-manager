@@ -47,6 +47,13 @@ fi
 echo "✅ Dependências OK"
 echo ""
 
+# Matar processo anterior na porta 8000 (se existir)
+if lsof -ti:8000 > /dev/null 2>&1; then
+    echo "🔄 Parando servidor anterior na porta 8000..."
+    kill $(lsof -ti:8000) 2>/dev/null || true
+    sleep 1
+fi
+
 # Executar aplicação
 echo "🌐 Servidor iniciando em http://127.0.0.1:8000"
 echo "   (Ctrl+C para parar)"

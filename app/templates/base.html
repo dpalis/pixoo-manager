@@ -120,12 +120,6 @@
                         <div class="crop-container">
                             <img x-ref="cropImage" :src="originalImageUrl" alt="Imagem para recorte" class="crop-source">
                         </div>
-                        <div class="crop-preview-section">
-                            <h4>Preview 64x64</h4>
-                            <div class="pixoo-preview-box">
-                                <canvas x-ref="cropPreviewCanvas" width="64" height="64" class="pixoo-preview-img"></canvas>
-                            </div>
-                        </div>
                         <div class="crop-actions">
                             <button @click="applyCrop()" class="primary" :disabled="cropApplying">
                                 <span x-show="!cropApplying">Aplicar Recorte</span>

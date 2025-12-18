@@ -6,12 +6,36 @@
 // ============================================
 // Heartbeat - Keep server alive while browser is open
 // ============================================
+let heartbeatFailures = 0;
+const MAX_HEARTBEAT_FAILURES = 3;
+
 async function sendHeartbeat() {
     try {
         await fetch('/api/heartbeat', { method: 'POST' });
+        heartbeatFailures = 0; // Reset on success
     } catch {
-        // Silently ignore errors
+        heartbeatFailures++;
+        if (heartbeatFailures >= MAX_HEARTBEAT_FAILURES) {
+            showServerClosedOverlay();
+        }
     }
+}
+
+function showServerClosedOverlay() {
+    // Prevent multiple overlays
+    if (document.querySelector('.server-closed-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'server-closed-overlay';
+    overlay.innerHTML = `
+        <div class="server-closed-content">
+            <div class="server-closed-icon">🔌</div>
+            <h2>Servidor Encerrado</h2>
+            <p>O Pixoo Manager foi fechado.</p>
+            <p>Você pode fechar esta aba com segurança.</p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 setInterval(sendHeartbeat, 15000);
@@ -617,38 +641,12 @@ function mediaUpload() {
             const image = this.$refs.cropImage;
             if (!image || this.cropper) return;
 
-            // Debounce para evitar atualizações excessivas do preview (60fps -> ~15fps)
-            let debounceTimer = null;
-            const debouncedUpdate = () => {
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => this.updateCropPreview(), 66);
-            };
-
             this.cropper = new Cropper(image, {
                 aspectRatio: 1,
                 viewMode: 1,
                 autoCropArea: 0.8,
-                responsive: true,
-                crop: debouncedUpdate
+                responsive: true
             });
-        },
-
-        updateCropPreview() {
-            if (!this.cropper) return;
-
-            const canvas = this.$refs.cropPreviewCanvas;
-            if (!canvas) return;
-
-            const ctx = canvas.getContext('2d');
-            const croppedCanvas = this.cropper.getCroppedCanvas({
-                width: 64,
-                height: 64
-            });
-
-            if (croppedCanvas) {
-                ctx.clearRect(0, 0, 64, 64);
-                ctx.drawImage(croppedCanvas, 0, 0, 64, 64);
-            }
         },
 
         async applyCrop() {
