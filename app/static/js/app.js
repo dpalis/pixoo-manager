@@ -72,12 +72,12 @@ document.addEventListener('visibilitychange', () => {
 // ============================================
 const utils = {
     /**
-     * Formata tempo em segundos para MM:SS.ms
+     * Formata tempo em segundos para MM:SS
      */
     formatTime(seconds) {
         const mins = Math.floor(seconds / 60);
-        const secs = (seconds % 60).toFixed(2);
-        return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     },
 
     /**
@@ -91,13 +91,13 @@ const utils = {
 
     /**
      * Parse string de tempo para segundos
-     * Formato: MM:SS.ms ou SS.ms ou SS
+     * Formato: MM:SS ou SS
      */
     parseTimeStr(str) {
-        const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+        const match = str.match(/^(?:(\d+):)?(\d+)$/);
         if (!match) return null;
         const mins = parseInt(match[1] || '0');
-        const secs = parseFloat(match[2]);
+        const secs = parseInt(match[2]);
         return mins * 60 + secs;
     },
 
@@ -171,6 +171,139 @@ const timeManagementMixin = {
         }
     }
 };
+
+// ============================================
+// Precision Slider Component (Lerp-based smooth movement)
+// ============================================
+/**
+ * Factory function that creates a precision slider component.
+ * Uses lerp interpolation for smooth, fluid movement like macOS native sliders.
+ *
+ * @param {Object} parentComponent - Reference to the parent Alpine component
+ *                                   (must have startTime, endTime, startTimeStr, endTimeStr,
+ *                                   getMaxDuration(), and optionally seekToTime())
+ */
+function precisionSlider(parentComponent) {
+    return {
+        // Estado
+        dragging: null,           // 'start' | 'end' | null
+        sliderRect: null,         // Bounding rect do slider
+        animationId: null,        // requestAnimationFrame ID
+        targetPercent: 0,         // Posição alvo (onde o mouse está)
+        currentPercent: 0,        // Posição atual (com lerp)
+
+        // Configuração
+        config: {
+            lerpFactor: 0.25,     // 0-1: maior = mais responsivo, menor = mais suave
+        },
+
+        // Referência ao componente pai
+        parent: parentComponent,
+
+        // Computed
+        get startPercent() {
+            const max = this.parent.getMaxDuration();
+            return max > 0 ? (this.parent.startTime / max) * 100 : 0;
+        },
+
+        get endPercent() {
+            const max = this.parent.getMaxDuration();
+            return max > 0 ? (this.parent.endTime / max) * 100 : 0;
+        },
+
+        get selectionWidth() {
+            return this.endPercent - this.startPercent;
+        },
+
+        // Bind handlers for proper `this` context
+        init() {
+            this._onDrag = this.onDrag.bind(this);
+            this._endDrag = this.endDrag.bind(this);
+            this._animate = this.animate.bind(this);
+        },
+
+        // Linear interpolation
+        lerp(a, b, t) {
+            return a + (b - a) * t;
+        },
+
+        // Iniciar drag
+        startDrag(event, handle) {
+            event.preventDefault();
+            this.dragging = handle;
+            this.sliderRect = this.$el.getBoundingClientRect();
+
+            // Inicializar posição atual
+            this.currentPercent = handle === 'start' ? this.startPercent : this.endPercent;
+            this.targetPercent = this.currentPercent;
+
+            // Listeners globais
+            document.addEventListener('mousemove', this._onDrag);
+            document.addEventListener('mouseup', this._endDrag);
+
+            // Iniciar animation loop
+            this.animate();
+        },
+
+        // Handler de movimento - apenas atualiza o target
+        onDrag(event) {
+            if (!this.dragging || !this.sliderRect) return;
+
+            // Calcular posição do mouse relativa ao slider
+            const mouseX = event.clientX - this.sliderRect.left;
+            const percent = Math.max(0, Math.min(100, (mouseX / this.sliderRect.width) * 100));
+
+            this.targetPercent = percent;
+        },
+
+        // Animation loop - interpola suavemente para o target
+        animate() {
+            if (!this.dragging) return;
+
+            // Lerp da posição atual para o target
+            this.currentPercent = this.lerp(this.currentPercent, this.targetPercent, this.config.lerpFactor);
+
+            // Converter percent para tempo
+            const duration = this.parent.getMaxDuration();
+            const time = (this.currentPercent / 100) * duration;
+
+            // Aplicar com limites
+            if (this.dragging === 'start') {
+                const newTime = Math.max(0, Math.min(time, this.parent.endTime - 1));
+                if (Math.abs(newTime - this.parent.startTime) > 0.01) {
+                    this.parent.startTime = newTime;
+                    this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
+                    if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
+                }
+            } else {
+                const newTime = Math.max(this.parent.startTime + 1, Math.min(time, duration));
+                if (Math.abs(newTime - this.parent.endTime) > 0.01) {
+                    this.parent.endTime = newTime;
+                    this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
+                    if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
+                }
+            }
+
+            // Continuar animação
+            this.animationId = requestAnimationFrame(this._animate);
+        },
+
+        // Finalizar drag
+        endDrag() {
+            this.dragging = null;
+
+            // Cancelar animation loop
+            if (this.animationId) {
+                cancelAnimationFrame(this.animationId);
+                this.animationId = null;
+            }
+
+            // Remover listeners
+            document.removeEventListener('mousemove', this._onDrag);
+            document.removeEventListener('mouseup', this._endDrag);
+        }
+    };
+}
 
 // ============================================
 // Connection Status Component
@@ -440,8 +573,8 @@ function mediaUpload() {
         videoDuration: 0,
         startTime: 0,
         endTime: 10,
-        startTimeStr: '00:00.00',
-        endTimeStr: '00:10.00',
+        startTimeStr: '00:00',
+        endTimeStr: '00:10',
         converting: false,
         convertProgress: 0,
         convertPhase: '',
@@ -838,8 +971,8 @@ function mediaUpload() {
             this.videoDuration = 0;
             this.startTime = 0;
             this.endTime = 10;
-            this.startTimeStr = '00:00.00';
-            this.endTimeStr = '00:10.00';
+            this.startTimeStr = '00:00';
+            this.endTimeStr = '00:10';
             this.converting = false;
             this.converted = false;
             this.convertedPreviewUrl = null;
@@ -875,8 +1008,8 @@ function youtubeDownload() {
         videoInfo: null,
         startTime: 0,
         endTime: 10,
-        startTimeStr: '00:00.00',
-        endTimeStr: '00:10.00',
+        startTimeStr: '00:00',
+        endTimeStr: '00:10',
         downloading: false,
         downloadProgress: 0,
         downloadPhase: '',
@@ -1239,8 +1372,8 @@ function youtubeDownload() {
             this.videoInfo = null;
             this.startTime = 0;
             this.endTime = 10;
-            this.startTimeStr = '00:00.00';
-            this.endTimeStr = '00:10.00';
+            this.startTimeStr = '00:00';
+            this.endTimeStr = '00:10';
             this.downloading = false;
             this.downloadId = null;
             this.previewUrl = null;
