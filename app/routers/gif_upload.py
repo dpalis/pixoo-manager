@@ -139,7 +139,7 @@ async def upload_gif_file(file: UploadFile = File(...)):
         gif_uploads.set(upload_id, {
             "path": temp_path,
             "metadata": metadata,
-            "converted": needs_conversion
+            "converted": not is_ready
         })
 
         return UploadResponse(
@@ -148,7 +148,7 @@ async def upload_gif_file(file: UploadFile = File(...)):
             height=metadata.height,
             frames=metadata.frames,
             file_size=metadata.file_size,
-            converted=needs_conversion,
+            converted=not is_ready,
             preview_url=f"/api/gif/preview/{upload_id}"
         )
 
