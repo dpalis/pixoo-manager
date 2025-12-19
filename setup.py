@@ -10,6 +10,7 @@ from app.__version__ import __version__
 
 APP = ["app/main.py"]
 DATA_FILES = [
+    ("", ["resources/Pixoo.icns"]),  # Icon at root of Resources
     ("templates", ["app/templates/base.html"]),
     ("static", ["app/static/favicon.ico"]),
     ("static/css", ["app/static/css/styles.css"]),

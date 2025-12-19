@@ -132,9 +132,10 @@ async def add_security_headers(request: Request, call_next):
     # connect-src blob: necessário para Cropper.js processar imagens
     # media-src blob: necessário para preview de vídeo no Safari
     # font-src data: necessário para fontes embutidas do YouTube embed
+    # unsafe-eval: necessário para Alpine.js avaliar expressões (x-data, x-show, etc.)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https://i.ytimg.com https://*.ytimg.com; "
         "media-src 'self' blob:; "
