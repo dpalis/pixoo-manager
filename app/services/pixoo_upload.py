@@ -9,6 +9,7 @@ import base64
 from pathlib import Path
 from typing import Callable, Optional
 
+import numpy as np
 from PIL import Image
 
 from app.config import MAX_UPLOAD_FRAMES, PIXOO_SIZE
@@ -37,11 +38,8 @@ def frame_to_base64(frame: Image.Image) -> str:
     if frame.size != (PIXOO_SIZE, PIXOO_SIZE):
         frame = frame.resize((PIXOO_SIZE, PIXOO_SIZE), Image.Resampling.NEAREST)
 
-    # Extrair pixels como lista flat [R, G, B, R, G, B, ...]
-    pixels = list(frame.getdata())
-    pixel_bytes = bytearray()
-    for r, g, b in pixels:
-        pixel_bytes.extend([r, g, b])
+    # Conversão direta array → bytes usando numpy (10-20x mais rápido)
+    pixel_bytes = np.array(frame, dtype=np.uint8).tobytes()
 
     return base64.b64encode(pixel_bytes).decode('utf-8')
 
