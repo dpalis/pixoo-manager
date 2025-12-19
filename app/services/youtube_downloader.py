@@ -5,6 +5,7 @@ Usa yt-dlp Python API para baixar trechos de video e converter para GIF.
 Implementa abordagem hibrida com 3 metodos em cascata para download parcial.
 """
 
+import gc
 import logging
 import os
 from dataclasses import dataclass
@@ -400,6 +401,8 @@ def _download_full_and_trim(
                 audio_codec="aac",
                 logger=None
             )
+        # Forçar liberação de recursos antes de deletar arquivo
+        gc.collect()
 
         if progress_callback:
             progress_callback("downloading", 100)
@@ -436,8 +439,9 @@ def _verify_segment_download(path: Path, expected_duration: float) -> bool:
     try:
         from moviepy import VideoFileClip
         with VideoFileClip(str(path)) as clip:
-            # Tolerancia de 2 segundos para variacao de keyframes
-            return abs(clip.duration - expected_duration) < 2.0
+            result = abs(clip.duration - expected_duration) < 2.0
+        gc.collect()  # Liberar recursos antes de possível reuso do arquivo
+        return result
     except Exception as e:
         logger.warning(f"Erro ao verificar segmento: {e}")
         return False
@@ -482,7 +486,6 @@ def download_and_convert_youtube(
         # Converter para GIF
         # Obter duração do vídeo e liberar recursos imediatamente
         from moviepy import VideoFileClip
-        import gc
         with VideoFileClip(str(video_path)) as clip:
             video_duration = clip.duration
         # Forçar liberação de recursos antes de reabrir o arquivo
