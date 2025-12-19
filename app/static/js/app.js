@@ -181,7 +181,7 @@ const timeManagementMixin = {
  *
  * Controls:
  * - Mouse drag: Direct 1:1 positioning
- * - ← / →: Adjust by ±0.5 second
+ * - ← / →: Adjust by ±0.2 second
  * - Shift + ← / →: Adjust by ±5 seconds
  *
  * @param {Object} parentComponent - Reference to the parent Alpine component
