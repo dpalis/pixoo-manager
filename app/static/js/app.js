@@ -72,12 +72,12 @@ document.addEventListener('visibilitychange', () => {
 // ============================================
 const utils = {
     /**
-     * Formata tempo em segundos para MM:SS.ms
+     * Formata tempo em segundos para MM:SS
      */
     formatTime(seconds) {
         const mins = Math.floor(seconds / 60);
-        const secs = (seconds % 60).toFixed(2);
-        return `${mins.toString().padStart(2, '0')}:${secs.padStart(5, '0')}`;
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     },
 
     /**
@@ -91,13 +91,13 @@ const utils = {
 
     /**
      * Parse string de tempo para segundos
-     * Formato: MM:SS.ms ou SS.ms ou SS
+     * Formato: MM:SS ou SS
      */
     parseTimeStr(str) {
-        const match = str.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+        const match = str.match(/^(?:(\d+):)?(\d+)$/);
         if (!match) return null;
         const mins = parseInt(match[1] || '0');
-        const secs = parseFloat(match[2]);
+        const secs = parseInt(match[2]);
         return mins * 60 + secs;
     },
 
@@ -171,6 +171,151 @@ const timeManagementMixin = {
         }
     }
 };
+
+// ============================================
+// Precision Slider Component (1:1 mapping + keyboard arrows)
+// ============================================
+/**
+ * Factory function that creates a precision slider component.
+ * Uses direct 1:1 mouse mapping with keyboard arrows for fine adjustment.
+ *
+ * Controls:
+ * - Mouse drag: Direct 1:1 positioning
+ * - ← / →: Adjust by ±0.2 second
+ * - Shift + ← / →: Adjust by ±5 seconds
+ *
+ * @param {Object} parentComponent - Reference to the parent Alpine component
+ *                                   (must have startTime, endTime, startTimeStr, endTimeStr,
+ *                                   getMaxDuration(), and optionally seekToTime())
+ */
+function precisionSlider(parentComponent) {
+    return {
+        // Estado
+        dragging: null,           // 'start' | 'end' | null
+        lastActiveHandle: null,   // 'start' | 'end' | null - receives keyboard adjustments
+        sliderRect: null,         // Bounding rect do slider
+        dragOffset: 0,            // Offset entre mouse e centro do handle no início do drag
+
+        // Referência ao componente pai
+        parent: parentComponent,
+
+        // Computed
+        get startPercent() {
+            const max = this.parent.getMaxDuration();
+            return max > 0 ? (this.parent.startTime / max) * 100 : 0;
+        },
+
+        get endPercent() {
+            const max = this.parent.getMaxDuration();
+            return max > 0 ? (this.parent.endTime / max) * 100 : 0;
+        },
+
+        get selectionWidth() {
+            return this.endPercent - this.startPercent;
+        },
+
+        // Bind handlers for proper `this` context
+        init() {
+            this._onDrag = this.onDrag.bind(this);
+            this._endDrag = this.endDrag.bind(this);
+        },
+
+        // Iniciar drag
+        startDrag(event, handle) {
+            event.preventDefault();
+            this.dragging = handle;
+            this.lastActiveHandle = handle;
+
+            // Pegar o container .precision-slider (pai do handle clicado)
+            const sliderContainer = event.target.closest('.precision-slider');
+            this.sliderRect = sliderContainer.getBoundingClientRect();
+
+            // Calcular offset: diferença entre onde o mouse clicou e onde o handle está
+            const mouseX = event.clientX - this.sliderRect.left;
+            const currentPercent = handle === 'start' ? this.startPercent : this.endPercent;
+            const handleX = (currentPercent / 100) * this.sliderRect.width;
+            this.dragOffset = mouseX - handleX;
+
+            // Focus no slider para receber eventos de teclado
+            sliderContainer.focus();
+
+            // Listeners globais
+            document.addEventListener('mousemove', this._onDrag);
+            document.addEventListener('mouseup', this._endDrag);
+        },
+
+        // Handler de movimento - mapeamento 1:1 direto com offset
+        onDrag(event) {
+            if (!this.dragging || !this.sliderRect) return;
+
+            // Calcular posição do mouse relativa ao slider, compensando o offset inicial
+            const mouseX = event.clientX - this.sliderRect.left - this.dragOffset;
+            const percent = Math.max(0, Math.min(1, mouseX / this.sliderRect.width));
+            const duration = this.parent.getMaxDuration();
+            const newTime = percent * duration;
+
+            // Aplicar com limites
+            if (this.dragging === 'start') {
+                // Não ultrapassar o handle de fim (mínimo 1s de diferença)
+                this.parent.startTime = Math.max(0, Math.min(newTime, this.parent.endTime - 1));
+                this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
+            } else {
+                // Não ficar antes do handle de início
+                this.parent.endTime = Math.max(this.parent.startTime + 1, Math.min(newTime, duration));
+                this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
+            }
+        },
+
+        // Finalizar drag
+        endDrag() {
+            this.dragging = null;
+
+            // Remover listeners
+            document.removeEventListener('mousemove', this._onDrag);
+            document.removeEventListener('mouseup', this._endDrag);
+        },
+
+        // Ajuste via setas do teclado
+        adjustTime(delta) {
+            if (!this.lastActiveHandle) {
+                // Se nenhum handle foi selecionado, selecionar o de início
+                this.lastActiveHandle = 'start';
+            }
+
+            const duration = this.parent.getMaxDuration();
+
+            if (this.lastActiveHandle === 'start') {
+                const newTime = this.parent.startTime + delta;
+                // Limites: >= 0 e < endTime - 1
+                this.parent.startTime = Math.max(0, Math.min(newTime, this.parent.endTime - 1));
+                this.parent.startTimeStr = utils.formatTime(this.parent.startTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.startTime);
+            } else {
+                const newTime = this.parent.endTime + delta;
+                // Limites: > startTime + 1 e <= duration
+                this.parent.endTime = Math.max(this.parent.startTime + 1, Math.min(newTime, duration));
+                this.parent.endTimeStr = utils.formatTime(this.parent.endTime);
+                if (this.parent.seekToTime) this.parent.seekToTime(this.parent.endTime);
+            }
+        },
+
+        // Handler de teclado
+        handleKeydown(event) {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+            event.preventDefault();
+            const delta = event.shiftKey ? 5 : 0.2;
+
+            if (event.key === 'ArrowLeft') {
+                this.adjustTime(-delta);
+            } else {
+                this.adjustTime(delta);
+            }
+        }
+    };
+}
 
 // ============================================
 // Connection Status Component
@@ -440,8 +585,8 @@ function mediaUpload() {
         videoDuration: 0,
         startTime: 0,
         endTime: 10,
-        startTimeStr: '00:00.00',
-        endTimeStr: '00:10.00',
+        startTimeStr: '00:00',
+        endTimeStr: '00:10',
         converting: false,
         convertProgress: 0,
         convertPhase: '',
@@ -838,8 +983,8 @@ function mediaUpload() {
             this.videoDuration = 0;
             this.startTime = 0;
             this.endTime = 10;
-            this.startTimeStr = '00:00.00';
-            this.endTimeStr = '00:10.00';
+            this.startTimeStr = '00:00';
+            this.endTimeStr = '00:10';
             this.converting = false;
             this.converted = false;
             this.convertedPreviewUrl = null;
@@ -875,8 +1020,8 @@ function youtubeDownload() {
         videoInfo: null,
         startTime: 0,
         endTime: 10,
-        startTimeStr: '00:00.00',
-        endTimeStr: '00:10.00',
+        startTimeStr: '00:00',
+        endTimeStr: '00:10',
         downloading: false,
         downloadProgress: 0,
         downloadPhase: '',
@@ -1239,8 +1384,8 @@ function youtubeDownload() {
             this.videoInfo = null;
             this.startTime = 0;
             this.endTime = 10;
-            this.startTimeStr = '00:00.00';
-            this.endTimeStr = '00:10.00';
+            this.startTimeStr = '00:00';
+            this.endTimeStr = '00:10';
             this.downloading = false;
             this.downloadId = null;
             this.previewUrl = null;

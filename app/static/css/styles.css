@@ -477,6 +477,95 @@ button.secondary:hover {
     background: var(--pixoo-red);
 }
 
+/* ============================================
+   Precision Slider (Pointer Lock)
+   ============================================ */
+.precision-slider {
+    position: relative;
+    width: 100%;
+    height: 40px;
+    background: var(--bg-dark);
+    border-radius: 4px;
+    user-select: none;
+}
+
+.slider-track {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--border-color);
+    transform: translateY(-50%);
+    border-radius: 2px;
+}
+
+.slider-selection {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--pixoo-blue), var(--pixoo-purple));
+    transform: translateY(-50%);
+    border-radius: 2px;
+}
+
+.slider-handle {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 14px;
+    border-radius: 3px;
+    cursor: ew-resize;
+    transform: translateX(-50%);
+    transition: filter 0.1s;
+
+    /* Linhas de grip */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.slider-handle::before,
+.slider-handle::after {
+    content: '';
+    width: 2px;
+    height: 40%;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 1px;
+}
+
+.slider-handle-start {
+    background: var(--pixoo-blue);
+}
+
+.slider-handle-end {
+    background: var(--pixoo-purple);
+}
+
+.slider-handle:hover {
+    filter: brightness(1.2);
+}
+
+.slider-handle.dragging {
+    filter: brightness(1.3);
+}
+
+/* Handle ativo (receberá ajustes de seta) */
+.slider-handle.active {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    filter: brightness(1.1);
+}
+
+/* Focus state - indica que teclado está disponível */
+.precision-slider:focus {
+    outline: none;
+}
+
+.precision-slider:focus-within {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
 /* Progress Section */
 .progress-section {
     padding: 1rem;

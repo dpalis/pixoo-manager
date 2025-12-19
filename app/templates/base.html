@@ -156,11 +156,11 @@
                             <div class="time-inputs">
                                 <label>
                                     Inicio:
-                                    <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00.00">
+                                    <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00">
                                 </label>
                                 <label>
                                     Fim:
-                                    <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10.00">
+                                    <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10">
                                 </label>
                                 <span class="duration-label" :class="{ 'error': segmentTooLong }">
                                     Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
@@ -168,25 +168,25 @@
                                 </span>
                             </div>
 
-                            <div class="timeline-slider">
-                                <input
-                                    type="range"
-                                    min="0"
-                                    :max="videoDuration"
-                                    step="0.1"
-                                    x-model="startTime"
-                                    @input="updateStartTime()"
-                                    class="range-start"
-                                >
-                                <input
-                                    type="range"
-                                    min="0"
-                                    :max="videoDuration"
-                                    step="0.1"
-                                    x-model="endTime"
-                                    @input="updateEndTime()"
-                                    class="range-end"
-                                >
+                            <!-- Precision Slider -->
+                            <div class="precision-slider"
+                                 x-data="precisionSlider($data)"
+                                 tabindex="0"
+                                 @keydown="handleKeydown($event)">
+                                <div class="slider-track"></div>
+                                <div class="slider-selection"
+                                     :style="`left: ${startPercent}%; width: ${selectionWidth}%`">
+                                </div>
+                                <div class="slider-handle slider-handle-start"
+                                     :style="`left: ${startPercent}%`"
+                                     :class="{ 'dragging': dragging === 'start', 'active': lastActiveHandle === 'start' }"
+                                     @mousedown="startDrag($event, 'start')">
+                                </div>
+                                <div class="slider-handle slider-handle-end"
+                                     :style="`left: ${endPercent}%`"
+                                     :class="{ 'dragging': dragging === 'end', 'active': lastActiveHandle === 'end' }"
+                                     @mousedown="startDrag($event, 'end')">
+                                </div>
                             </div>
                         </div>
 
@@ -301,11 +301,11 @@
                         <div class="time-inputs">
                             <label>
                                 Inicio:
-                                <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00.00">
+                                <input type="text" x-model="startTimeStr" @change="parseStartTime()" placeholder="00:00">
                             </label>
                             <label>
                                 Fim:
-                                <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10.00">
+                                <input type="text" x-model="endTimeStr" @change="parseEndTime()" placeholder="00:10">
                             </label>
                             <span class="duration-label" :class="{ 'error': segmentTooLong }">
                                 Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
@@ -313,25 +313,25 @@
                             </span>
                         </div>
 
-                        <div class="timeline-slider">
-                            <input
-                                type="range"
-                                min="0"
-                                :max="videoInfo.duration"
-                                step="0.1"
-                                x-model="startTime"
-                                @input="updateStartTime()"
-                                class="range-start"
-                            >
-                            <input
-                                type="range"
-                                min="0"
-                                :max="videoInfo.duration"
-                                step="0.1"
-                                x-model="endTime"
-                                @input="updateEndTime()"
-                                class="range-end"
-                            >
+                        <!-- Precision Slider -->
+                        <div class="precision-slider"
+                             x-data="precisionSlider($data)"
+                             tabindex="0"
+                             @keydown="handleKeydown($event)">
+                            <div class="slider-track"></div>
+                            <div class="slider-selection"
+                                 :style="`left: ${startPercent}%; width: ${selectionWidth}%`">
+                            </div>
+                            <div class="slider-handle slider-handle-start"
+                                 :style="`left: ${startPercent}%`"
+                                 :class="{ 'dragging': dragging === 'start', 'active': lastActiveHandle === 'start' }"
+                                 @mousedown="startDrag($event, 'start')">
+                            </div>
+                            <div class="slider-handle slider-handle-end"
+                                 :style="`left: ${endPercent}%`"
+                                 :class="{ 'dragging': dragging === 'end', 'active': lastActiveHandle === 'end' }"
+                                 @mousedown="startDrag($event, 'end')">
+                            </div>
                         </div>
                     </div>
                 </template>
