@@ -16,9 +16,9 @@ Aplicativo desktop para Mac (Apple Silicon) para gerenciar conteudo no display L
 
 ### Opcao 1: Baixar o App pronto
 
-1. Baixe `Pixoo Manager.app` da secao Releases
+1. Baixe `Pixoo.app` da secao Releases
 2. Mova para a pasta Aplicativos
-3. Abra o app (pode precisar aprovar no Seguranca & Privacidade)
+3. Abra o app (pode precisar aprovar em Ajustes do Sistema > Privacidade e Seguranca)
 
 ### Opcao 2: Rodar em desenvolvimento
 
@@ -42,33 +42,29 @@ O app abrira automaticamente no browser em http://127.0.0.1:8000
 
 ## Build do App (.app)
 
-Para criar o `Pixoo Manager.app`:
+Para criar o `Pixoo.app`:
 
 ### 1. Baixar FFmpeg (Apple Silicon)
 
 ```bash
+mkdir -p bin
 curl -L 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip' -o /tmp/ffmpeg.zip
 unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg_extracted
 mv /tmp/ffmpeg_extracted/ffmpeg bin/ffmpeg
 chmod +x bin/ffmpeg
 ```
 
-### 2. (Opcional) Baixar yt-dlp standalone
-
-Se quiser distribuir com yt-dlp bundled:
+### 2. Executar build
 
 ```bash
-curl -L 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos' -o bin/yt-dlp
-chmod +x bin/yt-dlp
+# Ativar virtualenv
+source .venv/bin/activate
+
+# Build com py2app
+python setup.py py2app
 ```
 
-### 3. Executar build
-
-```bash
-./build.sh
-```
-
-O app sera criado em `build/dist/Pixoo Manager.app` (~300MB)
+O app sera criado em `dist/Pixoo.app` (~400MB)
 
 ## Uso
 
@@ -97,7 +93,7 @@ O app sera criado em `build/dist/Pixoo Manager.app` (~300MB)
 - **Frontend**: Alpine.js + Pico.css
 - **Processamento**: Pillow, MoviePy, imageio
 - **YouTube**: yt-dlp
-- **Packaging**: PyInstaller
+- **Packaging**: py2app
 
 ## Licenca
 
