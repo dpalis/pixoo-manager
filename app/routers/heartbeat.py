@@ -6,12 +6,15 @@ within the timeout period, the server shuts down automatically.
 """
 
 import asyncio
+import logging
 import os
 import signal
 import time
 from typing import Optional
 
 from fastapi import APIRouter, Request
+
+logger = logging.getLogger(__name__)
 
 from app.middleware import RateLimiter, check_rate_limit
 
@@ -183,7 +186,7 @@ async def _check_inactivity():
         time_since = time.time() - last
 
         if time_since > INACTIVITY_TIMEOUT:
-            print(f"No heartbeat for {time_since:.0f}s. Shutting down...")
+            logger.warning(f"No heartbeat for {time_since:.0f}s. Shutting down...")
             await _graceful_shutdown()
             return
 
