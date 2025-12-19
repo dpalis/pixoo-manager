@@ -122,7 +122,7 @@ async def upload_media(file: UploadFile = File(...)):
     if not is_image and not is_video:
         raise HTTPException(
             status_code=400,
-            detail=f"Tipo de arquivo nao suportado: {content_type}"
+            detail=f"Tipo de arquivo não suportado: {content_type}"
         )
 
     # Salvar arquivo temporario
@@ -214,7 +214,7 @@ async def get_media_info(upload_id: str):
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     metadata = upload["metadata"]
 
@@ -242,13 +242,13 @@ async def head_media_preview(upload_id: str):
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
         media_uploads.delete(upload_id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     return Response(status_code=200)
 
@@ -259,12 +259,12 @@ async def get_media_preview(upload_id: str):
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     return FileResponse(
         path,
@@ -288,12 +288,12 @@ async def get_media_preview_scaled(
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     try:
         output = scale_gif(path, scale)
@@ -323,15 +323,15 @@ async def convert_video(request: ConvertRequest):
     validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     if upload["type"] != "video":
-        raise HTTPException(status_code=400, detail="Arquivo nao e um video")
+        raise HTTPException(status_code=400, detail="Arquivo não é um vídeo")
 
     path = upload["path"]
     if not path.exists():
         media_uploads.delete(request.id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     # Validar duracao
     try:
@@ -420,15 +420,15 @@ async def convert_video_sync(request: ConvertRequest):
     validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     if upload["type"] != "video":
-        raise HTTPException(status_code=400, detail="Arquivo nao e um video")
+        raise HTTPException(status_code=400, detail="Arquivo não é um vídeo")
 
     path = upload["path"]
     if not path.exists():
         media_uploads.delete(request.id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     try:
         # Operação bloqueante (conversão CPU-intensiva) - move para thread
@@ -466,10 +466,10 @@ async def send_to_pixoo(request: SendRequest):
     validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     if not upload.get("converted"):
-        raise HTTPException(status_code=400, detail="Arquivo nao foi convertido")
+        raise HTTPException(status_code=400, detail="Arquivo não foi convertido")
 
     # Verificar conexao
     conn = get_pixoo_connection()
@@ -482,7 +482,7 @@ async def send_to_pixoo(request: SendRequest):
     # Obter caminho do arquivo convertido
     path = upload.get("converted_path") or upload.get("path")
     if not path or not path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     try:
         result = await asyncio.to_thread(upload_gif, path, request.speed)
@@ -510,15 +510,15 @@ async def download_media(upload_id: str):
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     if not upload.get("converted"):
-        raise HTTPException(status_code=400, detail="Arquivo nao foi convertido")
+        raise HTTPException(status_code=400, detail="Arquivo não foi convertido")
 
     path = upload.get("converted_path") or upload.get("path")
 
     if not path or not path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     filename = f"pixoo_{upload_id}.gif"
     return FileResponse(
@@ -534,7 +534,7 @@ async def delete_upload(upload_id: str):
     """Remove upload e limpa arquivos temporarios."""
     validate_upload_id(upload_id)
     if not media_uploads.delete(upload_id):
-        raise HTTPException(status_code=404, detail="Upload nao encontrado")
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
 
     return {"success": True}
 
@@ -571,7 +571,7 @@ async def crop_image(
     if content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Tipo de arquivo nao suportado: {content_type}"
+            detail=f"Tipo de arquivo não suportado: {content_type}"
         )
 
     # Salvar arquivo temporario
@@ -604,7 +604,7 @@ async def crop_image(
 
             # Validar coordenadas
             if x < 0 or y < 0:
-                raise HTTPException(status_code=400, detail="Coordenadas nao podem ser negativas")
+                raise HTTPException(status_code=400, detail="Coordenadas não podem ser negativas")
             if x + width > img_width or y + height > img_height:
                 raise HTTPException(
                     status_code=400,

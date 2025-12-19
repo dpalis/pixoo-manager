@@ -270,7 +270,7 @@ async def delete_download(download_id: str):
     """Remove download e limpa arquivo temporario."""
     validate_upload_id(download_id)
     if not youtube_downloads.delete(download_id):
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
+        raise HTTPException(status_code=404, detail="Download não encontrado")
 
     return {"success": True}
 
@@ -310,4 +310,4 @@ async def get_thumbnail(video_id: str):
             except httpx.RequestError:
                 continue
 
-    raise HTTPException(status_code=404, detail="Thumbnail nao encontrada")
+    raise HTTPException(status_code=404, detail="Thumbnail não encontrada")

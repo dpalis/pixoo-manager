@@ -5,6 +5,7 @@ Implementa descoberta de dispositivos na rede e gerenciamento de conexão.
 Usa padrão Singleton para manter estado de conexão entre requests.
 """
 
+import logging
 import socket
 import threading
 from typing import List, Optional
@@ -13,6 +14,8 @@ import requests
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
 from app.services.exceptions import PixooConnectionError, PixooNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 class PixooServiceListener(ServiceListener):
@@ -106,9 +109,9 @@ class PixooConnection:
             devices = listener.devices.copy()
             zeroconf.close()
 
-        except Exception:
-            # mDNS pode falhar em algumas redes
-            pass
+        except Exception as e:
+            # mDNS pode falhar em algumas redes - log para debugging
+            logger.debug(f"mDNS discovery failed (will try network scan): {e}")
 
         # Se não encontrou via mDNS, tenta scan de rede como fallback
         if not devices:
