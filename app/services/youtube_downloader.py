@@ -42,7 +42,7 @@ except ImportError:
 def _check_ytdlp():
     """Verifica se yt_dlp esta disponivel."""
     if not _YTDLP_AVAILABLE:
-        raise ConversionError("yt-dlp nao encontrado. Instale com: pip install yt-dlp")
+        raise ConversionError("yt-dlp não encontrado. Instale com: pip install yt-dlp")
 
 
 @dataclass
@@ -247,7 +247,7 @@ def _try_ffmpeg_download(
 
     # Verificar se FFmpeg existe
     if not FFMPEG_PATH.exists():
-        raise FileNotFoundError(f"FFmpeg nao encontrado: {FFMPEG_PATH}")
+        raise FileNotFoundError(f"FFmpeg não encontrado: {FFMPEG_PATH}")
 
     try:
         if progress_callback:
@@ -385,7 +385,7 @@ def _download_full_and_trim(
             if possible_files:
                 full_video_path = possible_files[0]
             else:
-                raise ConversionError("Arquivo de video nao foi criado")
+                raise ConversionError("Arquivo de vídeo não foi criado")
 
         if progress_callback:
             progress_callback("downloading", 85)

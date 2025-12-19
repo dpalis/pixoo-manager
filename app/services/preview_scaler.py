@@ -81,11 +81,11 @@ def scale_gif(path: Path, scale: int = 16) -> io.BytesIO:
         BytesIO com o GIF escalado
 
     Raises:
-        FileNotFoundError: Se o arquivo nao existe
-        ValueError: Se o arquivo nao pode ser processado
+        FileNotFoundError: Se o arquivo não existe
+        ValueError: Se o arquivo não pode ser processado
     """
     if not path.exists():
-        raise FileNotFoundError(f"Arquivo nao encontrado: {path}")
+        raise FileNotFoundError(f"Arquivo não encontrado: {path}")
 
     try:
         # Usar cache com mtime para invalidar se arquivo mudar
