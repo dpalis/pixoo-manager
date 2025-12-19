@@ -92,10 +92,9 @@ async def upload_gif_file(file: UploadFile = File(...)):
 
     try:
         # Verificar se já está no tamanho correto (CPU-bound, move para thread)
-        needs_conversion = await asyncio.to_thread(is_pixoo_ready, temp_path)
-        needs_conversion = not needs_conversion
+        is_ready = await asyncio.to_thread(is_pixoo_ready, temp_path)
 
-        if needs_conversion:
+        if not is_ready:
             # Determinar se é imagem animada (GIF ou WebP animado)
             from PIL import Image
             with Image.open(temp_path) as img:

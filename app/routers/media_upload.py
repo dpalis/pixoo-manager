@@ -208,6 +208,9 @@ async def upload_media(file: UploadFile = File(...)):
 @router.get("/info/{upload_id}")
 async def get_media_info(upload_id: str):
     """Retorna informacoes do arquivo enviado."""
+    # Nota: media_upload usa validate_upload_id() ao invés de get_upload_or_404()
+    # porque precisa acessar campos específicos (type, converted_path) que variam
+    # conforme o estado do upload (video não convertido vs imagem já convertida)
     validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
