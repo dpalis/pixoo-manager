@@ -7,6 +7,7 @@ Endpoints:
 - GET /api/gif/preview/{upload_id} - Retorna preview do GIF
 """
 
+import asyncio
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -33,7 +34,11 @@ from app.services.exceptions import (
 )
 from app.services.preview_scaler import scale_gif
 from app.middleware import upload_limiter, check_rate_limit
-from app.services.upload_manager import gif_uploads
+from app.services.upload_manager import (
+    gif_uploads,
+    get_upload_or_404,
+    validate_upload_id,
+)
 
 router = APIRouter(prefix="/api/gif", tags=["gif"])
 
@@ -86,10 +91,10 @@ async def upload_gif_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Erro no upload: {e}")
 
     try:
-        # Verificar se já está no tamanho correto
-        needs_conversion = not is_pixoo_ready(temp_path)
+        # Verificar se já está no tamanho correto (CPU-bound, move para thread)
+        is_ready = await asyncio.to_thread(is_pixoo_ready, temp_path)
 
-        if needs_conversion:
+        if not is_ready:
             # Determinar se é imagem animada (GIF ou WebP animado)
             from PIL import Image
             with Image.open(temp_path) as img:
@@ -98,14 +103,18 @@ async def upload_gif_file(file: UploadFile = File(...)):
                     img.n_frames > 1
                 )
 
-            # Converter para 64x64 usando função apropriada
+            # Converter para 64x64 usando função apropriada (CPU-bound)
             options = ConvertOptions(led_optimize=True)
             if is_animated:
-                output_path, metadata = convert_gif(temp_path, options)
+                output_path, metadata = await asyncio.to_thread(
+                    convert_gif, temp_path, options
+                )
             else:
                 # Imagens estáticas (JPEG, PNG, WebP, GIF estático)
                 # convert_image aplica rotação EXIF automaticamente
-                output_path, metadata = convert_image(temp_path, options)
+                output_path, metadata = await asyncio.to_thread(
+                    convert_image, temp_path, options
+                )
 
             # Limpar arquivo original
             cleanup_files([temp_path])
@@ -154,33 +163,14 @@ async def upload_gif_file(file: UploadFile = File(...)):
 @router.head("/preview/{upload_id}")
 async def head_gif_preview(upload_id: str):
     """Verifica se preview existe (para validacao de estado)."""
-    upload_info = gif_uploads.get(upload_id)
-    if upload_info is None:
-        raise HTTPException(status_code=404, detail="Upload não encontrado")
-
-    path = upload_info["path"]
-
-    if not path.exists():
-        gif_uploads.delete(upload_id)
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
-
+    get_upload_or_404(gif_uploads, upload_id)
     return Response(status_code=200)
 
 
 @router.get("/preview/{upload_id}")
 async def get_gif_preview(upload_id: str):
-    """
-    Retorna o GIF processado para preview (versão original 64x64).
-    """
-    upload_info = gif_uploads.get(upload_id)
-    if upload_info is None:
-        raise HTTPException(status_code=404, detail="Upload não encontrado")
-
-    path = upload_info["path"]
-
-    if not path.exists():
-        gif_uploads.delete(upload_id)
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    """Retorna o GIF processado para preview (versão original 64x64)."""
+    _, path = get_upload_or_404(gif_uploads, upload_id)
 
     return FileResponse(
         path,
@@ -201,15 +191,7 @@ async def get_gif_preview_scaled(
     Por padrão scale=16, resultando em 1024x1024 pixels.
     Usa nearest-neighbor para manter pixels nítidos.
     """
-    upload_info = gif_uploads.get(upload_id)
-    if upload_info is None:
-        raise HTTPException(status_code=404, detail="Upload não encontrado")
-
-    path = upload_info["path"]
-
-    if not path.exists():
-        gif_uploads.delete(upload_id)
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    _, path = get_upload_or_404(gif_uploads, upload_id)
 
     try:
         output = scale_gif(path, scale)
@@ -233,9 +215,7 @@ async def send_gif_to_pixoo(request: SendRequest):
 
     Requer conexão prévia com o Pixoo via /api/connect.
     """
-    upload_info = gif_uploads.get(request.id)
-    if upload_info is None:
-        raise HTTPException(status_code=404, detail="Upload não encontrado")
+    _, path = get_upload_or_404(gif_uploads, request.id)
 
     # Verificar conexão
     conn = get_pixoo_connection()
@@ -245,14 +225,8 @@ async def send_gif_to_pixoo(request: SendRequest):
             detail="Não conectado ao Pixoo. Conecte primeiro via /api/connect"
         )
 
-    path = upload_info["path"]
-
-    if not path.exists():
-        gif_uploads.delete(request.id)
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
-
     try:
-        result = upload_gif(path, speed=request.speed)
+        result = await asyncio.to_thread(upload_gif, path, request.speed)
 
         return SendResponse(
             success=result["success"],
@@ -278,15 +252,7 @@ async def download_gif(upload_id: str):
     Rate limited: 10 requisições por minuto.
     """
     check_rate_limit(upload_limiter)
-    upload_info = gif_uploads.get(upload_id)
-    if upload_info is None:
-        raise HTTPException(status_code=404, detail="Upload não encontrado")
-
-    path = upload_info["path"]
-
-    if not path.exists():
-        gif_uploads.delete(upload_id)
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    _, path = get_upload_or_404(gif_uploads, upload_id)
 
     filename = f"pixoo_{upload_id}.gif"
     return FileResponse(
@@ -300,6 +266,7 @@ async def download_gif(upload_id: str):
 @router.delete("/{upload_id}")
 async def delete_upload(upload_id: str):
     """Remove um upload da memória e limpa arquivos temporários."""
+    validate_upload_id(upload_id)
     if not gif_uploads.delete(upload_id):
         raise HTTPException(status_code=404, detail="Upload não encontrado")
 

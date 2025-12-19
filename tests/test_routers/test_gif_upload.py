@@ -89,11 +89,17 @@ class TestGifPreviewEndpoint:
         assert response.status_code == 200
         assert response.headers["content-type"] == "image/gif"
 
-    def test_returns_404_for_invalid_upload(self, client):
-        """Deve retornar 404 para upload invalido."""
-        response = client.get("/api/gif/preview/invalid-id")
+    def test_returns_404_for_nonexistent_upload(self, client):
+        """Deve retornar 404 para upload que nao existe."""
+        response = client.get("/api/gif/preview/00000000")
 
         assert response.status_code == 404
+
+    def test_returns_400_for_invalid_id_format(self, client):
+        """Deve retornar 400 para formato de ID invalido."""
+        response = client.get("/api/gif/preview/invalid-id")
+
+        assert response.status_code == 400
 
 
 class TestGifSendEndpoint:
@@ -119,8 +125,20 @@ class TestGifSendEndpoint:
         assert response.status_code == 400
         assert "conectado" in response.json()["detail"].lower() or "Conecte" in response.json()["detail"]
 
-    def test_returns_404_for_invalid_upload(self, client, mock_pixoo_connection):
-        """Deve retornar 404 para upload invalido."""
+    def test_returns_404_for_nonexistent_upload(self, client, mock_pixoo_connection):
+        """Deve retornar 404 para upload que nao existe."""
+        # Conectar ao mock
+        client.post("/api/connect", json={"ip": "192.168.1.100"})
+
+        response = client.post(
+            "/api/gif/send",
+            json={"id": "00000000"}
+        )
+
+        assert response.status_code == 404
+
+    def test_returns_400_for_invalid_id_format(self, client, mock_pixoo_connection):
+        """Deve retornar 400 para formato de ID invalido."""
         # Conectar ao mock
         client.post("/api/connect", json={"ip": "192.168.1.100"})
 
@@ -129,7 +147,7 @@ class TestGifSendEndpoint:
             json={"id": "invalid-id"}
         )
 
-        assert response.status_code == 404
+        assert response.status_code == 400
 
 
 class TestGifDeleteEndpoint:
@@ -156,8 +174,14 @@ class TestGifDeleteEndpoint:
         preview_response = client.get(f"/api/gif/preview/{upload_id}")
         assert preview_response.status_code == 404
 
-    def test_returns_404_for_invalid_upload(self, client):
-        """Deve retornar 404 para upload invalido."""
-        response = client.delete("/api/gif/invalid-id")
+    def test_returns_404_for_nonexistent_upload(self, client):
+        """Deve retornar 404 para upload que nao existe."""
+        response = client.delete("/api/gif/00000000")
 
         assert response.status_code == 404
+
+    def test_returns_400_for_invalid_id_format(self, client):
+        """Deve retornar 400 para formato de ID invalido."""
+        response = client.delete("/api/gif/invalid-id")
+
+        assert response.status_code == 400

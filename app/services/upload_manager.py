@@ -5,11 +5,14 @@ Substitui os dicts _uploads espalhados pelos routers por um
 gerenciador centralizado com limpeza automática de entradas antigas.
 """
 
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+from fastapi import HTTPException
 
 from app.services.file_utils import cleanup_files
 
@@ -178,6 +181,65 @@ class UploadManager:
     def __contains__(self, upload_id: str) -> bool:
         """Permite usar 'in' operator."""
         return self.exists(upload_id)
+
+
+# Padrão para validação de upload_id: 8 caracteres hexadecimais
+UPLOAD_ID_PATTERN = re.compile(r'^[a-f0-9]{8}$')
+
+
+def validate_upload_id(upload_id: str) -> str:
+    """
+    Valida formato do upload_id.
+
+    Args:
+        upload_id: ID do upload (deve ser 8 caracteres hex)
+
+    Returns:
+        O upload_id validado
+
+    Raises:
+        HTTPException 400: Se formato inválido
+    """
+    if not UPLOAD_ID_PATTERN.match(upload_id):
+        raise HTTPException(status_code=400, detail="ID de upload inválido")
+    return upload_id
+
+
+def get_upload_or_404(
+    manager: UploadManager,
+    upload_id: str,
+    path_key: str = "path"
+) -> Tuple[Dict[str, Any], Path]:
+    """
+    Obtém upload e valida que arquivo existe.
+
+    Valida o formato do upload_id, busca no manager, e verifica
+    que o arquivo ainda existe no filesystem.
+
+    Args:
+        manager: UploadManager a consultar
+        upload_id: ID do upload
+        path_key: Chave do path no dict (default: "path")
+
+    Returns:
+        Tupla (upload_info, path)
+
+    Raises:
+        HTTPException 400: Se upload_id inválido
+        HTTPException 404: Se upload ou arquivo não encontrado
+    """
+    validate_upload_id(upload_id)
+
+    upload_info = manager.get(upload_id)
+    if upload_info is None:
+        raise HTTPException(status_code=404, detail="Upload não encontrado")
+
+    path = upload_info.get(path_key)
+    if not path or not path.exists():
+        manager.delete(upload_id)
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    return upload_info, path
 
 
 # Instâncias globais para cada tipo de upload

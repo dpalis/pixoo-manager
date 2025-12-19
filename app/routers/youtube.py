@@ -8,6 +8,7 @@ Endpoints:
 - GET /api/youtube/thumbnail/{video_id} - Proxy para thumbnail
 """
 
+import asyncio
 import uuid
 
 import httpx
@@ -34,7 +35,11 @@ from app.services.exceptions import (
 from app.services.preview_scaler import scale_gif
 from app.services.validators import validate_video_duration
 from app.middleware import youtube_limiter, check_rate_limit
-from app.services.upload_manager import youtube_downloads
+from app.services.upload_manager import (
+    youtube_downloads,
+    get_upload_or_404,
+    validate_upload_id,
+)
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"])
 
@@ -91,7 +96,8 @@ async def get_video_info(request: InfoRequest):
     Para Shorts, max_duration e 60s. Para videos normais, 10s.
     """
     try:
-        info = get_youtube_info(request.url)
+        # Operação bloqueante (rede + processamento) - move para thread
+        info = await asyncio.to_thread(get_youtube_info, request.url)
 
         # Detectar se e YouTube Shorts (baseado apenas na URL)
         shorts = is_youtube_shorts(request.url)
@@ -135,7 +141,9 @@ async def download_video(request: DownloadRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
-        gif_path, frames = download_and_convert_youtube(
+        # Operação bloqueante (download + conversão) - move para thread
+        gif_path, frames = await asyncio.to_thread(
+            download_and_convert_youtube,
             request.url,
             request.start,
             request.end
@@ -165,31 +173,14 @@ async def download_video(request: DownloadRequest):
 @router.head("/preview/{download_id}")
 async def head_preview(download_id: str):
     """Verifica se preview existe (para validacao de estado)."""
-    download = youtube_downloads.get(download_id)
-    if download is None:
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    path = download["path"]
-
-    if not path.exists():
-        youtube_downloads.delete(download_id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
-
+    get_upload_or_404(youtube_downloads, download_id)
     return Response(status_code=200)
 
 
 @router.get("/preview/{download_id}")
 async def get_preview(download_id: str):
     """Retorna preview do GIF convertido."""
-    download = youtube_downloads.get(download_id)
-    if download is None:
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    path = download["path"]
-
-    if not path.exists():
-        youtube_downloads.delete(download_id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+    _, path = get_upload_or_404(youtube_downloads, download_id)
 
     return FileResponse(
         path,
@@ -210,15 +201,7 @@ async def get_preview_scaled(
     Por padrão scale=16, resultando em 1024x1024 pixels.
     Usa nearest-neighbor para manter pixels nítidos.
     """
-    download = youtube_downloads.get(download_id)
-    if download is None:
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    path = download["path"]
-
-    if not path.exists():
-        youtube_downloads.delete(download_id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+    _, path = get_upload_or_404(youtube_downloads, download_id)
 
     try:
         output = scale_gif(path, scale)
@@ -238,15 +221,7 @@ async def get_preview_scaled(
 @router.post("/send", response_model=SendResponse)
 async def send_to_pixoo(request: SendRequest):
     """Envia GIF convertido para o Pixoo."""
-    download = youtube_downloads.get(request.id)
-    if download is None:
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    path = download["path"]
-
-    if not path.exists():
-        youtube_downloads.delete(request.id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+    _, path = get_upload_or_404(youtube_downloads, request.id)
 
     # Verificar conexao
     conn = get_pixoo_connection()
@@ -257,7 +232,7 @@ async def send_to_pixoo(request: SendRequest):
         )
 
     try:
-        result = upload_gif(path, speed=request.speed)
+        result = await asyncio.to_thread(upload_gif, path, request.speed)
         return SendResponse(
             success=result["success"],
             frames_sent=result["frames_sent"],
@@ -279,15 +254,7 @@ async def download_youtube_gif(download_id: str):
     Rate limited: 5 requisições por minuto.
     """
     check_rate_limit(youtube_limiter)
-    download = youtube_downloads.get(download_id)
-    if download is None:
-        raise HTTPException(status_code=404, detail="Download nao encontrado")
-
-    path = download["path"]
-
-    if not path.exists():
-        youtube_downloads.delete(download_id)
-        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+    _, path = get_upload_or_404(youtube_downloads, download_id)
 
     filename = f"youtube_{download_id}.gif"
     return FileResponse(
@@ -301,6 +268,7 @@ async def download_youtube_gif(download_id: str):
 @router.delete("/{download_id}")
 async def delete_download(download_id: str):
     """Remove download e limpa arquivo temporario."""
+    validate_upload_id(download_id)
     if not youtube_downloads.delete(download_id):
         raise HTTPException(status_code=404, detail="Download nao encontrado")
 

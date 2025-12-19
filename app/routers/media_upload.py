@@ -40,7 +40,11 @@ from app.services.exceptions import (
 from app.services.preview_scaler import scale_gif
 from app.services.validators import validate_video_duration
 from app.middleware import convert_limiter, upload_limiter, check_rate_limit
-from app.services.upload_manager import media_uploads
+from app.services.upload_manager import (
+    media_uploads,
+    get_upload_or_404,
+    validate_upload_id,
+)
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -145,12 +149,16 @@ async def upload_media(file: UploadFile = File(...)):
             with Image.open(temp_path) as img:
                 is_animated = hasattr(img, 'n_frames') and img.n_frames > 1
 
-            # Usar função apropriada para imagem estática ou animada
+            # Usar função apropriada para imagem estática ou animada (CPU-bound)
             options = ConvertOptions(led_optimize=True)
             if is_animated:
-                output_path, metadata = convert_gif(temp_path, options)
+                output_path, metadata = await asyncio.to_thread(
+                    convert_gif, temp_path, options
+                )
             else:
-                output_path, metadata = convert_image(temp_path, options)
+                output_path, metadata = await asyncio.to_thread(
+                    convert_image, temp_path, options
+                )
 
             cleanup_files([temp_path])
 
@@ -170,8 +178,8 @@ async def upload_media(file: UploadFile = File(...)):
             )
 
         else:
-            # Obter info do video
-            video_info = get_video_info(temp_path)
+            # Obter info do video (CPU-bound)
+            video_info = await asyncio.to_thread(get_video_info, temp_path)
 
             media_uploads.set(upload_id, {
                 "type": "video",
@@ -200,6 +208,10 @@ async def upload_media(file: UploadFile = File(...)):
 @router.get("/info/{upload_id}")
 async def get_media_info(upload_id: str):
     """Retorna informacoes do arquivo enviado."""
+    # Nota: media_upload usa validate_upload_id() ao invés de get_upload_or_404()
+    # porque precisa acessar campos específicos (type, converted_path) que variam
+    # conforme o estado do upload (video não convertido vs imagem já convertida)
+    validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -227,6 +239,7 @@ async def get_media_info(upload_id: str):
 @router.head("/preview/{upload_id}")
 async def head_media_preview(upload_id: str):
     """Verifica se preview existe (para validacao de estado)."""
+    validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -243,6 +256,7 @@ async def head_media_preview(upload_id: str):
 @router.get("/preview/{upload_id}")
 async def get_media_preview(upload_id: str):
     """Retorna preview do arquivo convertido."""
+    validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -271,6 +285,7 @@ async def get_media_preview_scaled(
     Por padrão scale=16, resultando em 1024x1024 pixels.
     Usa nearest-neighbor para manter pixels nítidos.
     """
+    validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -305,6 +320,7 @@ async def convert_video(request: ConvertRequest):
     Rate limited: 5 requisições por minuto (CPU intensivo).
     """
     check_rate_limit(convert_limiter)
+    validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -401,6 +417,7 @@ async def convert_video_sync(request: ConvertRequest):
     Rate limited: 5 requisições por minuto (CPU intensivo).
     """
     check_rate_limit(convert_limiter)
+    validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -414,7 +431,9 @@ async def convert_video_sync(request: ConvertRequest):
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     try:
-        output_path, frames = convert_video_to_gif(
+        # Operação bloqueante (conversão CPU-intensiva) - move para thread
+        output_path, frames = await asyncio.to_thread(
+            convert_video_to_gif,
             path,
             request.start,
             request.end
@@ -444,6 +463,7 @@ async def convert_video_sync(request: ConvertRequest):
 @router.post("/send", response_model=SendResponse)
 async def send_to_pixoo(request: SendRequest):
     """Envia arquivo convertido para o Pixoo."""
+    validate_upload_id(request.id)
     upload = media_uploads.get(request.id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -465,7 +485,7 @@ async def send_to_pixoo(request: SendRequest):
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
 
     try:
-        result = upload_gif(path, speed=request.speed)
+        result = await asyncio.to_thread(upload_gif, path, request.speed)
         return SendResponse(
             success=result["success"],
             frames_sent=result["frames_sent"],
@@ -487,6 +507,7 @@ async def download_media(upload_id: str):
     Rate limited: 10 requisições por minuto.
     """
     check_rate_limit(upload_limiter)
+    validate_upload_id(upload_id)
     upload = media_uploads.get(upload_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
@@ -511,6 +532,7 @@ async def download_media(upload_id: str):
 @router.delete("/{upload_id}")
 async def delete_upload(upload_id: str):
     """Remove upload e limpa arquivos temporarios."""
+    validate_upload_id(upload_id)
     if not media_uploads.delete(upload_id):
         raise HTTPException(status_code=404, detail="Upload nao encontrado")
 
