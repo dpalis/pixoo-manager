@@ -480,9 +480,13 @@ def download_and_convert_youtube(
                 progress_callback(phase, 40 + progress * 0.6)
 
         # Converter para GIF
+        # Obter duração do vídeo e liberar recursos imediatamente
         from moviepy import VideoFileClip
+        import gc
         with VideoFileClip(str(video_path)) as clip:
             video_duration = clip.duration
+        # Forçar liberação de recursos antes de reabrir o arquivo
+        gc.collect()
 
         gif_path, frames = convert_video_to_gif(
             video_path,

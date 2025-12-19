@@ -4,8 +4,11 @@ Menu bar integration for macOS.
 Provides a menu bar icon with options to open browser and quit the app.
 """
 
+import logging
 import urllib.request
 import webbrowser
+
+logger = logging.getLogger(__name__)
 
 
 def create_menu_bar(server_url: str = "http://127.0.0.1:8000"):
@@ -21,7 +24,7 @@ def create_menu_bar(server_url: str = "http://127.0.0.1:8000"):
     try:
         import rumps
     except ImportError:
-        print("rumps not installed. Menu bar disabled.")
+        logger.warning("rumps not installed. Menu bar disabled.")
         return None
 
     class PixooMenuBar(rumps.App):

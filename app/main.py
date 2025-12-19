@@ -5,6 +5,7 @@ Execute com: python -m app.main
 O navegador abrirá automaticamente em http://127.0.0.1:8000
 """
 
+import logging
 import os
 import shutil
 import sys
@@ -14,6 +15,8 @@ import webbrowser
 from contextlib import asynccontextmanager
 
 import uvicorn
+
+from app.logging_config import setup_logging
 
 # Session ID único para esta instância do servidor
 # Usado para invalidar estado do cliente quando o servidor reinicia
@@ -53,7 +56,13 @@ async def lifespan(app: FastAPI):
     Startup: Abre browser (se não headless), inicia monitor de inatividade
     Shutdown: Limpa arquivos temporários e desconecta do Pixoo
     """
+    # Configura logging estruturado
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
     # Startup
+    logger.info("Pixoo Manager starting...")
+
     # Abre browser apenas se não headless E não estiver sendo controlado externamente
     if not HEADLESS and not _SKIP_BROWSER_IN_LIFESPAN:
         webbrowser.open(f"http://{HOST}:{PORT}")
@@ -70,22 +79,23 @@ async def lifespan(app: FastAPI):
     heartbeat_router.stop_inactivity_monitor()
 
     # Shutdown cleanup
+    logger.info("Shutting down...")
     try:
         # Desconecta do Pixoo
         from app.services.pixoo_connection import get_pixoo_connection
         conn = get_pixoo_connection()
         if conn.is_connected:
             conn.disconnect()
-            print("Desconectado do Pixoo")
+            logger.info("Desconectado do Pixoo")
 
         # Limpa diretório temporário
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR, ignore_errors=True)
-            print(f"Diretório temporário limpo: {TEMP_DIR}")
+            logger.debug(f"Diretório temporário limpo: {TEMP_DIR}")
 
-        print("Cleanup concluído com sucesso")
+        logger.info("Cleanup concluído")
     except Exception as e:
-        print(f"Erro no cleanup: {e}")
+        logger.error(f"Erro no cleanup: {e}")
 
 
 app = FastAPI(
@@ -118,14 +128,13 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
     # Content Security Policy
-    # 'unsafe-eval' necessário para Alpine.js
     # frame-src para YouTube IFrame API
     # connect-src blob: necessário para Cropper.js processar imagens
     # media-src blob: necessário para preview de vídeo no Safari
     # font-src data: necessário para fontes embutidas do YouTube embed
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; "
+        "script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https://i.ytimg.com https://*.ytimg.com; "
         "media-src 'self' blob:; "
@@ -224,7 +233,11 @@ def _wait_for_server(timeout: float = 5.0) -> bool:
 
 
 if __name__ == "__main__":
-    print(f"\n  Pixoo Manager rodando em http://{HOST}:{PORT}")
+    # Setup logging antes de qualquer output
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Pixoo Manager rodando em http://{HOST}:{PORT}")
 
     # Tenta usar menu bar no macOS (não-headless)
     if sys.platform == "darwin" and not HEADLESS:
@@ -244,18 +257,18 @@ if __name__ == "__main__":
                 webbrowser.open(f"http://{HOST}:{PORT}")
 
                 # Menu bar na main thread (bloqueia até quit)
-                print("  Menu bar ativo. Use o ícone para encerrar.\n")
+                logger.info("Menu bar ativo. Use o ícone para encerrar.")
                 run_menu_bar(f"http://{HOST}:{PORT}")
             else:
-                print("  Erro: servidor não iniciou a tempo")
+                logger.error("Servidor não iniciou a tempo")
                 sys.exit(1)
 
         except ImportError:
             # rumps não disponível, comportamento normal
-            print("  Menu bar não disponível (rumps não instalado)")
-            print("  Pressione Ctrl+C para parar\n")
+            logger.warning("Menu bar não disponível (rumps não instalado)")
+            logger.info("Pressione Ctrl+C para parar")
             uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
     else:
         # Não-macOS ou headless
-        print("  Pressione Ctrl+C para parar\n")
+        logger.info("Pressione Ctrl+C para parar")
         uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
