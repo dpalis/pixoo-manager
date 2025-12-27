@@ -1,0 +1,4 @@
+- Entender a limitação de frames (FPS) do Pixoo. Ao testar a solução atual, tive problemas em subir os GIFs que gerei contendo 10s. É quantidade de FPS? É a duração? Li em algum lugar que o Pixoo só aceita 40 frames. É isso mesmo? Pesquisar para ter certeza de como operar e propor uma solução.
+- Pesquisar soluções existentes para poder escrever recados no Pixoo. Olhar no YouTube, GitHub, RedIt etc. Propor soluções. Deverá constar em umauma nova aba no app.
+- Ao criar os gifs para que eles subam no Pixoo, é possível já deixá-los configurados para que rodem em loop?
+- Pesquisar soluções existentes (no YouTube, GitHub, RedIt etc) para outras ideias.

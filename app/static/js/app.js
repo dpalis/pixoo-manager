@@ -583,10 +583,11 @@ function mediaUpload() {
         previewUrl: null,
         videoUrl: null,
         videoDuration: 0,
+        maxDuration: 5,  // Atualizado pelo backend
         startTime: 0,
-        endTime: 10,
+        endTime: 5,
         startTimeStr: '00:00',
-        endTimeStr: '00:10',
+        endTimeStr: '00:05',
         converting: false,
         convertProgress: 0,
         convertPhase: '',
@@ -674,7 +675,7 @@ function mediaUpload() {
         get segmentTooLong() {
             // Arredonda para 1 casa decimal para evitar erros de ponto flutuante
             const rounded = Math.round(this.segmentDuration * 10) / 10;
-            return rounded > 10;
+            return rounded > this.maxDuration;
         },
 
         get canSend() {
@@ -770,7 +771,8 @@ function mediaUpload() {
                     this.mediaType = 'video';
                     this.videoUrl = URL.createObjectURL(file);
                     this.videoDuration = data.duration;
-                    this.endTime = Math.min(10, data.duration);
+                    this.maxDuration = data.max_duration || 5;
+                    this.endTime = Math.min(this.maxDuration, data.duration);
                     this.endTimeStr = utils.formatTime(this.endTime);
                     this.fileInfo = `${data.width}x${data.height} - ${data.duration.toFixed(1)}s`;
                     this.clearMessage();
@@ -981,10 +983,11 @@ function mediaUpload() {
             this.previewUrl = null;
             this.videoUrl = null;
             this.videoDuration = 0;
+            this.maxDuration = 5;
             this.startTime = 0;
-            this.endTime = 10;
+            this.endTime = 5;
             this.startTimeStr = '00:00';
-            this.endTimeStr = '00:10';
+            this.endTimeStr = '00:05';
             this.converting = false;
             this.converted = false;
             this.convertedPreviewUrl = null;
@@ -997,6 +1000,18 @@ function mediaUpload() {
 
             this.clearMessage();
             sessionStorage.removeItem('mediaUpload');
+        },
+
+        clearConversion() {
+            // Limpa apenas a conversão, mantendo o vídeo carregado
+            this.converted = false;
+            this.convertedPreviewUrl = null;
+            this.convertedFrames = 0;
+            this.converting = false;
+            this.convertProgress = 0;
+            this.convertPhase = '';
+            this.clearMessage();
+            this.saveState();
         },
 
         showMessage(text, type) {
@@ -1383,15 +1398,27 @@ function youtubeDownload() {
             this.url = '';
             this.videoInfo = null;
             this.startTime = 0;
-            this.endTime = 10;
+            this.endTime = 5;
             this.startTimeStr = '00:00';
-            this.endTimeStr = '00:10';
+            this.endTimeStr = '00:05';
             this.downloading = false;
             this.downloadId = null;
             this.previewUrl = null;
             this.convertedFrames = 0;
             this.clearMessage();
             sessionStorage.removeItem('youtubeDownload');
+        },
+
+        clearConversion() {
+            // Limpa apenas a conversão, mantendo o vídeo do YouTube
+            this.downloadId = null;
+            this.previewUrl = null;
+            this.convertedFrames = 0;
+            this.downloading = false;
+            this.downloadProgress = 0;
+            this.downloadPhase = '';
+            this.clearMessage();
+            this.saveState();
         },
 
         showMessage(text, type) {
