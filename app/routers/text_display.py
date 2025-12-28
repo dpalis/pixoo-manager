@@ -22,7 +22,7 @@ class TextRequest(BaseModel):
     """Request para enviar texto ao Pixoo."""
     text: str = Field(..., min_length=1, max_length=500)
     color: str = Field(default="#FFFFFF")
-    speed: int = Field(default=100, ge=10, le=200)
+    speed: int = Field(default=100, ge=100, le=200)
     font: int = Field(default=0, ge=0, le=7)
     y: int = Field(default=28, ge=0, le=56)
 
