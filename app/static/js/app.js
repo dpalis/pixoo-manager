@@ -602,6 +602,17 @@ function mediaUpload() {
         cropper: null,
         cropApplied: false,
         cropApplying: false,
+        // GIF trim state (para GIFs com muitos frames)
+        needsTrim: false,
+        gifTotalFrames: 0,
+        gifDurationMs: 0,
+        startFrame: 0,
+        endFrame: 40,
+        trimming: false,
+        trimApplied: false,
+        originalGifUploadId: null,
+        originalGifPreviewUrl: null,
+        originalGifTotalFrames: 0,
 
         async init() {
             await this.restoreState();
@@ -679,7 +690,7 @@ function mediaUpload() {
         },
 
         get canSend() {
-            return (this.mediaType === 'gif' && this.uploadId) ||
+            return (this.mediaType === 'gif' && this.uploadId && !this.needsTrim) ||
                    (this.mediaType === 'image' && this.uploadId) ||
                    (this.mediaType === 'video' && this.converted);
         },
@@ -764,8 +775,22 @@ function mediaUpload() {
                     this.mediaType = 'gif';
                     this.previewUrl = data.preview_url;
                     this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
-                    this.converted = true;
-                    this.clearMessage();
+
+                    if (data.needs_trim) {
+                        // GIF precisa ser recortado
+                        this.needsTrim = true;
+                        this.gifTotalFrames = data.frames;
+                        this.gifDurationMs = data.duration_ms;
+                        this.startFrame = 0;
+                        this.endFrame = Math.min(40, data.frames);
+                        this.converted = false;
+                        this.showMessage(`GIF tem ${data.frames} frames. Selecione um trecho de até 40 frames.`, 'info');
+                    } else {
+                        // GIF já está OK
+                        this.needsTrim = false;
+                        this.converted = true;
+                        this.clearMessage();
+                    }
                 } else {
                     // Video
                     this.mediaType = 'video';
@@ -998,6 +1023,18 @@ function mediaUpload() {
             this.cropApplied = false;
             this.cropApplying = false;
 
+            // Reset estado do trim (GIF)
+            this.needsTrim = false;
+            this.gifTotalFrames = 0;
+            this.gifDurationMs = 0;
+            this.startFrame = 0;
+            this.endFrame = 40;
+            this.trimming = false;
+            this.trimApplied = false;
+            this.originalGifUploadId = null;
+            this.originalGifPreviewUrl = null;
+            this.originalGifTotalFrames = 0;
+
             this.clearMessage();
             sessionStorage.removeItem('mediaUpload');
         },
@@ -1012,6 +1049,96 @@ function mediaUpload() {
             this.convertPhase = '';
             this.clearMessage();
             this.saveState();
+        },
+
+        async trimGif() {
+            // Recorta o GIF para o intervalo selecionado
+            if (!this.uploadId || !this.needsTrim) return;
+
+            const frameCount = this.endFrame - this.startFrame;
+            if (frameCount > 40) {
+                this.showMessage('Selecione no máximo 40 frames', 'error');
+                return;
+            }
+            if (frameCount < 1) {
+                this.showMessage('Selecione pelo menos 1 frame', 'error');
+                return;
+            }
+
+            this.trimming = true;
+            this.showMessage('Recortando GIF...', 'info');
+
+            try {
+                // Guardar original antes do primeiro trim
+                if (!this.trimApplied) {
+                    this.originalGifUploadId = this.uploadId;
+                    this.originalGifPreviewUrl = this.previewUrl;
+                    this.originalGifTotalFrames = this.gifTotalFrames;
+                }
+
+                const response = await fetch('/api/gif/trim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: this.uploadId,
+                        start_frame: this.startFrame,
+                        end_frame: this.endFrame
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro ao recortar', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+
+                // Atualizar com o novo GIF recortado
+                this.uploadId = data.id;
+                this.previewUrl = data.preview_url;
+                this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
+                this.needsTrim = data.needs_trim;
+                this.converted = !data.needs_trim;
+                this.convertedFrames = data.frames;
+                this.trimApplied = true;
+
+                if (data.needs_trim) {
+                    this.showMessage(`Ainda tem ${data.frames} frames. Reduza para 40.`, 'error');
+                } else {
+                    this.showMessage(`GIF recortado! ${data.frames} frames`, 'success');
+                }
+
+            } catch (e) {
+                console.error('Erro ao recortar GIF:', e);
+                this.showMessage('Erro ao recortar GIF', 'error');
+            } finally {
+                this.trimming = false;
+            }
+        },
+
+        clearTrim() {
+            // Volta ao GIF original para refazer o recorte
+            if (!this.trimApplied || !this.originalGifUploadId) return;
+
+            this.uploadId = this.originalGifUploadId;
+            this.previewUrl = this.originalGifPreviewUrl;
+            this.gifTotalFrames = this.originalGifTotalFrames;
+            this.needsTrim = true;
+            this.trimApplied = false;
+            this.converted = false;
+            this.startFrame = 0;
+            this.endFrame = Math.min(40, this.originalGifTotalFrames);
+            this.fileInfo = `64x64 - ${this.originalGifTotalFrames} frames`;
+            this.showMessage('Recorte limpo. Selecione novos frames.', 'info');
+        },
+
+        get selectedFrameCount() {
+            return Math.max(0, this.endFrame - this.startFrame);
+        },
+
+        get framesTooMany() {
+            return this.selectedFrameCount > 40;
         },
 
         showMessage(text, type) {

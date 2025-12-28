@@ -128,6 +128,75 @@ def load_gif_frames(path: Path) -> Tuple[List[Image.Image], List[int]]:
     return frames, durations
 
 
+def trim_gif(
+    path: Path,
+    start_frame: int,
+    end_frame: int
+) -> Tuple[Path, 'GifMetadata']:
+    """
+    Recorta um GIF para incluir apenas os frames do intervalo especificado.
+
+    Args:
+        path: Caminho do GIF original
+        start_frame: Índice do primeiro frame (0-based, inclusive)
+        end_frame: Índice do último frame (0-based, exclusive)
+
+    Returns:
+        Tupla (caminho do GIF recortado, metadados)
+
+    Raises:
+        ConversionError: Se os índices forem inválidos
+        TooManyFramesError: Se o resultado tiver mais frames que o limite
+    """
+    # Carregar frames originais
+    frames, durations = load_gif_frames(path)
+    total_frames = len(frames)
+
+    # Validar índices
+    if start_frame < 0 or start_frame >= total_frames:
+        raise ConversionError(f"Frame inicial inválido: {start_frame}")
+    if end_frame <= start_frame or end_frame > total_frames:
+        raise ConversionError(f"Frame final inválido: {end_frame}")
+
+    # Extrair frames do intervalo
+    selected_frames = frames[start_frame:end_frame]
+    selected_durations = durations[start_frame:end_frame]
+    num_frames = len(selected_frames)
+
+    # Verificar limite
+    if num_frames > MAX_CONVERT_FRAMES:
+        raise TooManyFramesError(
+            f"Trecho tem {num_frames} frames, máximo é {MAX_CONVERT_FRAMES}"
+        )
+
+    # Criar arquivo de saída
+    output_path = create_temp_output(".gif")
+
+    # Salvar GIF recortado
+    selected_frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=selected_frames[1:],
+        duration=selected_durations,
+        loop=0,
+        optimize=False
+    )
+
+    # Calcular duração total
+    total_duration_ms = sum(selected_durations)
+
+    metadata = GifMetadata(
+        width=selected_frames[0].size[0],
+        height=selected_frames[0].size[1],
+        frames=num_frames,
+        duration_ms=total_duration_ms,
+        file_size=output_path.stat().st_size,
+        path=output_path
+    )
+
+    return output_path, metadata
+
+
 def smart_crop(image: Image.Image, target_size: int = PIXOO_SIZE) -> Image.Image:
     """
     Crop inteligente que preserva aspect ratio e centraliza o conteúdo.
@@ -666,12 +735,18 @@ def convert_gif(
             loop=0  # Loop infinito
         )
 
-        # Criar metadados
+        # Ler arquivo salvo para obter contagem real de frames
+        # (GIFs podem ter frames duplicados removidos pelo encoder)
+        with Image.open(output_path) as saved_gif:
+            actual_frames = getattr(saved_gif, 'n_frames', 1)
+            actual_duration = saved_gif.info.get('duration', 100) * actual_frames
+
+        # Criar metadados com contagem real
         metadata = GifMetadata(
             width=PIXOO_SIZE,
             height=PIXOO_SIZE,
-            frames=len(converted_frames),
-            duration_ms=int(avg_duration * len(converted_frames)),
+            frames=actual_frames,
+            duration_ms=actual_duration,
             file_size=output_path.stat().st_size,
             path=output_path
         )

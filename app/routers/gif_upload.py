@@ -16,12 +16,13 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.config import ALLOWED_GIF_TYPES, ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE
+from app.config import ALLOWED_GIF_TYPES, ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, MAX_UPLOAD_FRAMES
 from app.services.file_utils import stream_upload_to_temp, cleanup_files
 from app.services.gif_converter import (
     convert_gif,
     convert_image,
     is_pixoo_ready,
+    trim_gif,
     ConvertOptions,
     GifMetadata,
 )
@@ -30,6 +31,7 @@ from app.services.pixoo_connection import get_pixoo_connection
 from app.services.exceptions import (
     ConversionError,
     PixooConnectionError,
+    TooManyFramesError,
     UploadError,
 )
 from app.services.preview_scaler import scale_gif
@@ -49,9 +51,18 @@ class UploadResponse(BaseModel):
     width: int
     height: int
     frames: int
+    duration_ms: int
     file_size: int
     converted: bool
+    needs_trim: bool
     preview_url: str
+
+
+class TrimRequest(BaseModel):
+    """Request para recortar GIF."""
+    id: str
+    start_frame: int
+    end_frame: int
 
 
 class SendRequest(BaseModel):
@@ -104,7 +115,8 @@ async def upload_gif_file(file: UploadFile = File(...)):
                 )
 
             # Converter para 64x64 usando função apropriada (CPU-bound)
-            options = ConvertOptions(led_optimize=True)
+            # Não limitar frames aqui - deixar o usuário escolher via trim
+            options = ConvertOptions(led_optimize=True, max_frames=1000)
             if is_animated:
                 output_path, metadata = await asyncio.to_thread(
                     convert_gif, temp_path, options
@@ -147,8 +159,10 @@ async def upload_gif_file(file: UploadFile = File(...)):
             width=metadata.width,
             height=metadata.height,
             frames=metadata.frames,
+            duration_ms=metadata.duration_ms,
             file_size=metadata.file_size,
             converted=not is_ready,
+            needs_trim=metadata.frames > MAX_UPLOAD_FRAMES,
             preview_url=f"/api/gif/preview/{upload_id}"
         )
 
@@ -261,6 +275,62 @@ async def download_gif(upload_id: str):
         filename=filename,
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.post("/trim", response_model=UploadResponse)
+async def trim_gif_endpoint(request: TrimRequest):
+    """
+    Recorta um GIF para incluir apenas os frames especificados.
+
+    Útil quando o GIF tem mais de 40 frames e precisa ser
+    reduzido para envio ao Pixoo.
+
+    Returns:
+        Novo upload com o GIF recortado
+    """
+    check_rate_limit(upload_limiter)
+
+    # Obter upload original
+    upload_data, original_path = get_upload_or_404(gif_uploads, request.id)
+
+    try:
+        # Recortar GIF (CPU-bound, move para thread)
+        output_path, metadata = await asyncio.to_thread(
+            trim_gif,
+            original_path,
+            request.start_frame,
+            request.end_frame
+        )
+
+        # Gerar novo ID para o GIF recortado
+        new_upload_id = str(uuid.uuid4())[:8]
+
+        # Armazenar novo upload
+        gif_uploads.set(new_upload_id, {
+            "path": output_path,
+            "metadata": metadata,
+            "converted": True,
+            "trimmed_from": request.id
+        })
+
+        return UploadResponse(
+            id=new_upload_id,
+            width=metadata.width,
+            height=metadata.height,
+            frames=metadata.frames,
+            duration_ms=metadata.duration_ms,
+            file_size=metadata.file_size,
+            converted=True,
+            needs_trim=metadata.frames > MAX_UPLOAD_FRAMES,
+            preview_url=f"/api/gif/preview/{new_upload_id}"
+        )
+
+    except TooManyFramesError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConversionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao recortar GIF: {e}")
 
 
 @router.delete("/{upload_id}")
