@@ -1034,9 +1034,9 @@ function youtubeDownload() {
         loading: false,
         videoInfo: null,
         startTime: 0,
-        endTime: 10,
+        endTime: 5,
         startTimeStr: '00:00',
-        endTimeStr: '00:10',
+        endTimeStr: '00:05',
         downloading: false,
         downloadProgress: 0,
         downloadPhase: '',
@@ -1108,8 +1108,8 @@ function youtubeDownload() {
         },
 
         get maxDuration() {
-            // Shorts permitem ate 60s, videos normais ate 10s
-            return this.videoInfo?.max_duration || 10;
+            // Shorts permitem ate 60s, videos normais ate 5s
+            return this.videoInfo?.max_duration || 5;
         },
 
         get segmentTooLong() {
