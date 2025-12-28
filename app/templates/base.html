@@ -103,13 +103,59 @@
                     </div>
                 </div>
 
-                <!-- Preview de GIF -->
-                <template x-if="mediaType === 'gif' && previewUrl">
+                <!-- Preview de GIF (sem necessidade de trim) -->
+                <template x-if="mediaType === 'gif' && previewUrl && !needsTrim">
                     <div class="preview-container">
                         <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
                         <div class="file-info">
                             <p x-text="fileName"></p>
                             <p x-text="fileInfo"></p>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Editor de GIF (precisa de trim) -->
+                <template x-if="mediaType === 'gif' && previewUrl && needsTrim">
+                    <div class="gif-editor">
+                        <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
+                        <div class="file-info">
+                            <p x-text="fileName"></p>
+                            <p x-text="fileInfo"></p>
+                        </div>
+
+                        <div class="trim-controls">
+                            <div class="frame-inputs">
+                                <label>
+                                    Frame inicial:
+                                    <input type="number" x-model.number="startFrame" min="0" :max="gifTotalFrames - 1">
+                                </label>
+                                <label>
+                                    Frame final:
+                                    <input type="number" x-model.number="endFrame" :min="startFrame + 1" :max="gifTotalFrames">
+                                </label>
+                                <span class="frame-count" :class="{ 'error': framesTooMany }">
+                                    <span x-text="selectedFrameCount"></span> frames
+                                    <span x-show="framesTooMany">(max 40)</span>
+                                </span>
+                            </div>
+
+                            <!-- Slider visual para frames -->
+                            <div class="frame-slider">
+                                <input
+                                    type="range"
+                                    x-model.number="startFrame"
+                                    min="0"
+                                    :max="gifTotalFrames - 1"
+                                    class="slider-start"
+                                >
+                                <input
+                                    type="range"
+                                    x-model.number="endFrame"
+                                    :min="1"
+                                    :max="gifTotalFrames"
+                                    class="slider-end"
+                                >
+                            </div>
                         </div>
                     </div>
                 </template>
@@ -214,6 +260,22 @@
                 <!-- Acoes -->
                 <div class="actions" x-show="hasFile">
                     <button @click="clearFile()" class="secondary">Limpar</button>
+                    <button
+                        x-show="mediaType === 'gif' && needsTrim"
+                        @click="trimGif()"
+                        :disabled="trimming || framesTooMany"
+                        class="primary"
+                    >
+                        <span x-show="!trimming">Recortar GIF</span>
+                        <span x-show="trimming">Recortando...</span>
+                    </button>
+                    <button
+                        x-show="mediaType === 'gif' && trimApplied"
+                        @click="clearTrim()"
+                        class="secondary"
+                    >
+                        Refazer Recorte
+                    </button>
                     <button
                         x-show="mediaType === 'video' && !converted"
                         @click="convertVideo()"
