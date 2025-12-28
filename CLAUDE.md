@@ -19,9 +19,8 @@ Aplicação Mac desktop para gerenciar conteúdo no display LED Divoom Pixoo 64.
 ### Requisitos Não-Funcionais
 
 - 100% offline após conexão com Pixoo (exceto YouTube)
-- Limite de 40 frames por upload (segurança do Pixoo)
-- Limite de 92 frames por conversão
-- Limite de 10 segundos para vídeos
+- Limite de 40 frames por upload e conversão
+- Limite de 5 segundos para vídeos (40 frames a 8 FPS)
 - Interface simples com 3 tabs
 
 ---
@@ -249,7 +248,7 @@ app/
 |-------|-----------|
 | Pixoo não encontrado na rede | Fallback para IP manual |
 | GIF muito grande (muitos frames) | Limitar a 40 frames no upload |
-| Vídeo muito longo | Limitar a 10 segundos |
+| Vídeo muito longo | Limitar a 5 segundos |
 | YouTube bloqueia download | yt-dlp atualizado, mensagem de erro clara |
 | Conversão lenta | Progress bar via SSE |
 

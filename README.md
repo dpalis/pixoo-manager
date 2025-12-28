@@ -82,9 +82,8 @@ O app sera criado em `dist/Pixoo.app` (~400MB)
 | Limite | Valor |
 |--------|-------|
 | Dimensao do display | 64x64 pixels |
-| Frames maximo (upload) | 40 |
-| Frames maximo (conversao) | 92 |
-| Duracao maxima de video | 10 segundos |
+| Frames maximo | 40 |
+| Duracao maxima de video | 5 segundos |
 | Tamanho maximo de arquivo | 500MB |
 
 ## Stack Tecnica

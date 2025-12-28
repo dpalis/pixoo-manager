@@ -74,7 +74,7 @@
                  @dragleave.prevent="dragOver = false"
                  @drop.prevent="handleDrop($event)">
                 <h2>Mídia para Pixoo</h2>
-                <p class="description">Arraste GIFs, fotos ou vídeos (max 10s). Arquivos são convertidos automaticamente para 64x64.</p>
+                <p class="description">Arraste GIFs, fotos ou vídeos (max 5s). Arquivos são convertidos automaticamente para 64x64.</p>
 
                 <!-- Zona de upload -->
                 <div
@@ -164,7 +164,7 @@
                                 </label>
                                 <span class="duration-label" :class="{ 'error': segmentTooLong }">
                                     Duracao: <span x-text="segmentDuration.toFixed(1)"></span>s
-                                    <span x-show="segmentTooLong">(max 10s)</span>
+                                    <span x-show="segmentTooLong">(max 5s)</span>
                                 </span>
                             </div>
 
@@ -223,6 +223,13 @@
                         Converter para GIF
                     </button>
                     <button
+                        x-show="mediaType === 'video' && converted"
+                        @click="clearConversion()"
+                        class="secondary"
+                    >
+                        Reconverter
+                    </button>
+                    <button
                         x-show="canSend"
                         @click="downloadGif()"
                         class="secondary"
@@ -246,7 +253,7 @@
             <!-- Tab: YouTube -->
             <div class="tab-content" x-data="youtubeDownload()">
                 <h2>YouTube para Pixoo</h2>
-                <p class="description">Baixe um trecho de video do YouTube (max 10s) e converta para GIF 64x64.</p>
+                <p class="description">Baixe um trecho de video do YouTube (max 5s) e converta para GIF 64x64.</p>
 
                 <!-- Campo de URL -->
                 <div class="url-input-section" x-show="!videoInfo">
@@ -365,6 +372,13 @@
                         class="primary"
                     >
                         Baixar e Converter
+                    </button>
+                    <button
+                        x-show="downloadId"
+                        @click="clearConversion()"
+                        class="secondary"
+                    >
+                        Reconverter
                     </button>
                     <button
                         x-show="downloadId"
