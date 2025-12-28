@@ -1558,6 +1558,161 @@ function youtubeDownload() {
     };
 }
 
+// ============================================
+// Text Display Component
+// ============================================
+function textDisplay() {
+    return {
+        text: '',
+        color: '#FFFFFF',
+        speed: 100,
+        font: 0,
+        y: 28,
+        sending: false,
+        message: '',
+        messageType: '',
+        animationId: null,
+        scrollX: 320,
+        ctx: null,
+
+        get canSend() {
+            return this.text.trim().length > 0 && !this.sending;
+        },
+
+        init() {
+            this.$nextTick(() => this.initCanvas());
+        },
+
+        initCanvas() {
+            const canvas = this.$refs.previewCanvas;
+            if (!canvas) return;
+            this.ctx = canvas.getContext('2d');
+            this.animate();
+        },
+
+        updatePreview() {
+            // Reset scroll position when text changes
+            if (this.text.length === 0) {
+                this.scrollX = 320;
+            }
+        },
+
+        animate() {
+            if (!this.ctx) return;
+            const ctx = this.ctx;
+
+            // Clear canvas with black background (simulating LED display)
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 320, 320);
+
+            // Draw grid (64x64 pixels scaled 5x)
+            ctx.strokeStyle = '#1a1a2e';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 64; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * 5, 0);
+                ctx.lineTo(i * 5, 320);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * 5);
+                ctx.lineTo(320, i * 5);
+                ctx.stroke();
+            }
+
+            // Draw text if present
+            if (this.text) {
+                ctx.fillStyle = this.color;
+
+                // Font size based on font selection (approximate)
+                let fontSize;
+                switch (parseInt(this.font)) {
+                    case 2: fontSize = 32; break;  // Compact
+                    case 4: fontSize = 48; break;  // Wide
+                    case 8: fontSize = 24; break;  // Small
+                    default: fontSize = 40; break; // Default
+                }
+
+                ctx.font = `${fontSize}px monospace`;
+                ctx.textBaseline = 'top';
+                ctx.fillText(this.text, this.scrollX, parseInt(this.y) * 5);
+
+                // Animate scroll
+                const textWidth = ctx.measureText(this.text).width;
+                // Speed: lower value = faster scroll
+                const scrollSpeed = (210 - this.speed) / 30;
+                this.scrollX -= scrollSpeed;
+
+                // Reset when text scrolls off screen
+                if (this.scrollX < -textWidth) {
+                    this.scrollX = 320;
+                }
+            }
+
+            this.animationId = requestAnimationFrame(() => this.animate());
+        },
+
+        async sendText() {
+            if (!this.canSend) return;
+
+            this.sending = true;
+            this.clearMessage();
+
+            try {
+                const response = await fetch('/api/text/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: this.text,
+                        color: this.color,
+                        speed: parseInt(this.speed),
+                        font: parseInt(this.font),
+                        y: parseInt(this.y)
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.showMessage('Texto enviado!', 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao enviar texto:', e);
+                this.showMessage('Erro de conexao', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        async clearText() {
+            try {
+                const response = await fetch('/api/text/clear', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    this.showMessage('Textos limpos!', 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao limpar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao limpar textos:', e);
+                this.showMessage('Erro ao limpar', 'error');
+            }
+        },
+
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+            setTimeout(() => this.clearMessage(), 3000);
+        },
+
+        clearMessage() {
+            this.message = '';
+            this.messageType = '';
+        }
+    };
+}
+
 // Expose utils globally for template use
 window.formatTime = utils.formatTime;
 window.formatFileSize = utils.formatFileSize;

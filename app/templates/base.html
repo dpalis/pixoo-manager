@@ -63,6 +63,14 @@
                 </svg>
                 YouTube
             </a>
+            <a href="/text" class="tab {% if active_tab == 'text' %}active{% endif %}">
+                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                    <line x1="9" y1="20" x2="15" y2="20"></line>
+                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                </svg>
+                Texto
+            </a>
         </nav>
 
         <!-- Conteudo especifico de cada pagina -->
@@ -456,6 +464,116 @@
                         class="primary"
                     >
                         Enviar para Pixoo
+                    </button>
+                </div>
+
+                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+            </div>
+
+            {% elif active_tab == 'text' %}
+            <!-- Tab: Texto Scrolling -->
+            <div class="tab-content" x-data="textDisplay()" x-init="init()">
+                <h2>Texto para Pixoo</h2>
+                <p class="description">Envie mensagens de texto scrolling para o display LED do Pixoo 64.</p>
+
+                <!-- Campo de texto -->
+                <div class="form-group">
+                    <label for="textInput">Mensagem</label>
+                    <input
+                        type="text"
+                        id="textInput"
+                        x-model="text"
+                        @input.debounce.300ms="updatePreview()"
+                        placeholder="Digite seu recado..."
+                        maxlength="500"
+                    >
+                    <small class="char-counter" x-text="`${text.length}/500 caracteres`"></small>
+                </div>
+
+                <!-- Controles inline: Cor + Fonte -->
+                <div class="text-controls">
+                    <div class="control-group">
+                        <label for="colorInput">Cor</label>
+                        <input
+                            type="color"
+                            id="colorInput"
+                            x-model="color"
+                            @input="updatePreview()"
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="fontSelect">Fonte</label>
+                        <select id="fontSelect" x-model="font" @change="updatePreview()">
+                            <option value="0">Padrao</option>
+                            <option value="2">Compacta</option>
+                            <option value="4">Larga</option>
+                            <option value="7">Pequena</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Velocidade -->
+                <div class="form-group">
+                    <label>
+                        Velocidade: <span x-text="speed + 'ms'"></span>
+                        <small class="speed-hint">(menor = mais rapido)</small>
+                    </label>
+                    <input
+                        type="range"
+                        x-model="speed"
+                        @input="updatePreview()"
+                        min="100"
+                        max="200"
+                        step="10"
+                    >
+                    <div class="range-labels">
+                        <span>Rapido</span>
+                        <span>Lento</span>
+                    </div>
+                </div>
+
+                <!-- Posicao Y -->
+                <div class="form-group">
+                    <label>Posicao Vertical: <span x-text="y"></span></label>
+                    <input
+                        type="range"
+                        x-model="y"
+                        @input="updatePreview()"
+                        min="0"
+                        max="56"
+                        step="1"
+                    >
+                    <div class="range-labels">
+                        <span>Topo</span>
+                        <span>Base</span>
+                    </div>
+                </div>
+
+                <!-- Preview Canvas -->
+                <div class="text-preview-container">
+                    <label>Preview</label>
+                    <div class="canvas-wrapper">
+                        <canvas x-ref="previewCanvas" width="320" height="320"></canvas>
+                    </div>
+                    <small class="preview-disclaimer">O preview e uma simulacao aproximada. O resultado no Pixoo pode variar.</small>
+                </div>
+
+                <!-- Acoes -->
+                <div class="actions">
+                    <button
+                        @click="clearText()"
+                        class="secondary"
+                        :disabled="!$root.querySelector('.connection-status .connected') || sending"
+                    >
+                        Limpar Textos
+                    </button>
+                    <button
+                        @click="sendText()"
+                        :disabled="!canSend"
+                        class="primary"
+                    >
+                        <span x-show="!sending">Enviar</span>
+                        <span x-show="sending">Enviando...</span>
                     </button>
                 </div>
 

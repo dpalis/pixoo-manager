@@ -31,6 +31,7 @@ from app.routers import connection as connection_router
 from app.routers import gif_upload as gif_router
 from app.routers import heartbeat as heartbeat_router
 from app.routers import media_upload as media_router
+from app.routers import text_display as text_router
 from app.routers import youtube as youtube_router
 from app.middleware import CSRFMiddleware
 
@@ -159,6 +160,7 @@ app.include_router(connection_router.router)
 app.include_router(gif_router.router)
 app.include_router(heartbeat_router.router)
 app.include_router(media_router.router)
+app.include_router(text_router.router)
 app.include_router(youtube_router.router)
 
 
@@ -205,6 +207,17 @@ async def youtube_page(request: Request):
     return templates.TemplateResponse("base.html", {
         "request": request,
         "active_tab": "youtube",
+        "max_file_size": MAX_FILE_SIZE,
+        "session_id": SERVER_SESSION_ID,
+    })
+
+
+@app.get("/text")
+async def text_page(request: Request):
+    """Página de texto scrolling."""
+    return templates.TemplateResponse("base.html", {
+        "request": request,
+        "active_tab": "text",
         "max_file_size": MAX_FILE_SIZE,
         "session_id": SERVER_SESSION_ID,
     })
