@@ -1565,7 +1565,7 @@ function textDisplay() {
     return {
         text: '',
         color: '#FFFFFF',
-        speed: 100,
+        speed: 150,
         font: 0,
         y: 28,
         sending: false,

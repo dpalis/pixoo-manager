@@ -14,7 +14,7 @@ class TextSender:
 
     Uso:
         sender = TextSender()
-        result = sender.send_text("Hello!", "#FFFFFF", 100, 0, 28)
+        result = sender.send_text("Hello!", "#FFFFFF", 150, 0, 28)
         result = sender.clear_text()
     """
 
@@ -25,7 +25,7 @@ class TextSender:
         self,
         text: str,
         color: str = "#FFFFFF",
-        speed: int = 100,
+        speed: int = 150,
         font: int = 0,
         y: int = 28
     ) -> dict:
@@ -35,7 +35,7 @@ class TextSender:
         Args:
             text: Texto a exibir (max 500 chars)
             color: Cor em hex #RRGGBB (default: branco)
-            speed: Velocidade em ms entre frames, 100-200 (default: 100)
+            speed: Velocidade em ms entre frames, 150-200 (default: 150)
             font: Índice da fonte, 0-7 (default: 0)
             y: Posição vertical, 0-56 (default: 28 = centro)
 
