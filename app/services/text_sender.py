@@ -35,7 +35,7 @@ class TextSender:
         Args:
             text: Texto a exibir (max 500 chars)
             color: Cor em hex #RRGGBB (default: branco)
-            speed: Velocidade em ms entre frames, 10-200 (default: 100)
+            speed: Velocidade em ms entre frames, 100-200 (default: 100)
             font: Índice da fonte, 0-7 (default: 0)
             y: Posição vertical, 0-56 (default: 28 = centro)
 

@@ -507,7 +507,7 @@
                             <option value="0">Padrao</option>
                             <option value="2">Compacta</option>
                             <option value="4">Larga</option>
-                            <option value="8">Pequena</option>
+                            <option value="7">Pequena</option>
                         </select>
                     </div>
                 </div>
@@ -563,7 +563,7 @@
                     <button
                         @click="clearText()"
                         class="secondary"
-                        :disabled="!$root.querySelector('.connection-status .connected') && !sending"
+                        :disabled="!$root.querySelector('.connection-status .connected') || sending"
                     >
                         Limpar Textos
                     </button>
