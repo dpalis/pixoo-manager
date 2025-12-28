@@ -1713,6 +1713,302 @@ function textDisplay() {
     };
 }
 
+// ============================================
+// Layout Editor Component (Multi-line + Backgrounds)
+// ============================================
+function layoutEditor() {
+    return {
+        // Background config
+        background: {
+            type: 'solid',
+            color: '#000000',
+            gradient_start: '#000000',
+            gradient_end: '#333333',
+            gradient_direction: 'vertical',
+            pattern_type: 'checkerboard',
+            pattern_color1: '#000000',
+            pattern_color2: '#1a1a2e'
+        },
+
+        // Text lines
+        lines: [
+            { text: '', x: 0, y: 16, color: '#FFFFFF', font_size: 'medium', font_type: 'sans', speed: 120 },
+            { text: '', x: 0, y: 40, color: '#FFFFFF', font_size: 'medium', font_type: 'sans', speed: 120 }
+        ],
+
+        // Global speed
+        globalSpeed: 120,
+
+        // State
+        sending: false,
+        message: '',
+        messageType: '',
+        animationId: null,
+        ctx: null,
+        scrollPositions: [],
+        backgroundImage: null,
+
+        get canSend() {
+            const hasText = this.lines.some(line => line.text.trim().length > 0);
+            return hasText && !this.sending;
+        },
+
+        init() {
+            this.$nextTick(() => this.initCanvas());
+            // Initialize scroll positions for each line
+            this.scrollPositions = this.lines.map(() => 320);
+        },
+
+        initCanvas() {
+            const canvas = this.$refs.previewCanvas;
+            if (!canvas) return;
+            this.ctx = canvas.getContext('2d');
+            this.updatePreview();
+            this.animate();
+        },
+
+        addLine() {
+            if (this.lines.length >= 20) return;
+
+            // Calculate next Y position (distribute evenly)
+            const nextY = Math.min(56, (this.lines.length + 1) * 10);
+
+            this.lines.push({
+                text: '',
+                x: 0,
+                y: nextY,
+                color: '#FFFFFF',
+                font_size: 'medium',
+                font_type: 'sans',
+                speed: this.globalSpeed
+            });
+            this.scrollPositions.push(320);
+            this.updatePreview();
+        },
+
+        removeLine(index) {
+            if (this.lines.length <= 1) return;
+            this.lines.splice(index, 1);
+            this.scrollPositions.splice(index, 1);
+            this.updatePreview();
+        },
+
+        applyGlobalSpeed() {
+            this.lines.forEach(line => {
+                line.speed = parseInt(this.globalSpeed);
+            });
+        },
+
+        updatePreview() {
+            // Render background to canvas
+            this.renderBackground();
+        },
+
+        renderBackground() {
+            if (!this.ctx) return;
+
+            const ctx = this.ctx;
+            const bg = this.background;
+            const scale = 5; // 64 * 5 = 320
+
+            if (bg.type === 'solid') {
+                ctx.fillStyle = bg.color;
+                ctx.fillRect(0, 0, 320, 320);
+            } else if (bg.type === 'gradient') {
+                let gradient;
+                if (bg.gradient_direction === 'vertical') {
+                    gradient = ctx.createLinearGradient(0, 0, 0, 320);
+                } else if (bg.gradient_direction === 'horizontal') {
+                    gradient = ctx.createLinearGradient(0, 0, 320, 0);
+                } else {
+                    gradient = ctx.createLinearGradient(0, 0, 320, 320);
+                }
+                gradient.addColorStop(0, bg.gradient_start);
+                gradient.addColorStop(1, bg.gradient_end);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 320, 320);
+            } else if (bg.type === 'pattern') {
+                this.renderPattern(ctx, bg, scale);
+            }
+
+            // Draw grid overlay
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 64; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * scale, 0);
+                ctx.lineTo(i * scale, 320);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * scale);
+                ctx.lineTo(320, i * scale);
+                ctx.stroke();
+            }
+        },
+
+        renderPattern(ctx, bg, scale) {
+            const cellSize = 8 * scale;
+
+            // Base color
+            ctx.fillStyle = bg.pattern_color1;
+            ctx.fillRect(0, 0, 320, 320);
+
+            ctx.fillStyle = bg.pattern_color2;
+
+            if (bg.pattern_type === 'checkerboard') {
+                for (let y = 0; y < 8; y++) {
+                    for (let x = 0; x < 8; x++) {
+                        if ((x + y) % 2 === 1) {
+                            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                        }
+                    }
+                }
+            } else if (bg.pattern_type === 'stripes_h') {
+                for (let y = 0; y < 8; y++) {
+                    if (y % 2 === 1) {
+                        ctx.fillRect(0, y * cellSize, 320, cellSize);
+                    }
+                }
+            } else if (bg.pattern_type === 'stripes_v') {
+                for (let x = 0; x < 8; x++) {
+                    if (x % 2 === 1) {
+                        ctx.fillRect(x * cellSize, 0, cellSize, 320);
+                    }
+                }
+            } else if (bg.pattern_type === 'dots') {
+                const dotRadius = cellSize / 3;
+                for (let y = 0; y < 8; y++) {
+                    for (let x = 0; x < 8; x++) {
+                        ctx.beginPath();
+                        ctx.arc(
+                            x * cellSize + cellSize / 2,
+                            y * cellSize + cellSize / 2,
+                            dotRadius,
+                            0,
+                            Math.PI * 2
+                        );
+                        ctx.fill();
+                    }
+                }
+            }
+        },
+
+        animate() {
+            if (!this.ctx) return;
+
+            // Render background first
+            this.renderBackground();
+
+            const ctx = this.ctx;
+            const scale = 5;
+
+            // Draw each text line
+            this.lines.forEach((line, index) => {
+                if (!line.text) return;
+
+                ctx.fillStyle = line.color;
+
+                // Font size based on selection
+                let fontSize;
+                switch (line.font_size) {
+                    case 'small': fontSize = 24; break;
+                    case 'large': fontSize = 48; break;
+                    default: fontSize = 36; break;
+                }
+
+                // Font family based on type
+                const fontFamily = line.font_type === 'pixel' ? 'monospace' : 'sans-serif';
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                ctx.textBaseline = 'top';
+
+                // Get or initialize scroll position
+                if (this.scrollPositions[index] === undefined) {
+                    this.scrollPositions[index] = 320;
+                }
+
+                ctx.fillText(line.text, this.scrollPositions[index], line.y * scale);
+
+                // Animate scroll
+                const textWidth = ctx.measureText(line.text).width;
+                const scrollSpeed = (220 - line.speed) / 30;
+                this.scrollPositions[index] -= scrollSpeed;
+
+                // Reset when text scrolls off screen
+                if (this.scrollPositions[index] < -textWidth) {
+                    this.scrollPositions[index] = 320;
+                }
+            });
+
+            this.animationId = requestAnimationFrame(() => this.animate());
+        },
+
+        async sendLayout() {
+            if (!this.canSend) return;
+
+            this.sending = true;
+            this.clearMessage();
+
+            try {
+                const response = await fetch('/api/layout/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        background: this.background,
+                        lines: this.lines.filter(l => l.text.trim()).map(line => ({
+                            text: line.text,
+                            x: line.x,
+                            y: line.y,
+                            color: line.color,
+                            font_size: line.font_size,
+                            font_type: line.font_type,
+                            speed: parseInt(line.speed)
+                        }))
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.showMessage(`Layout enviado! (${data.lines_sent} linhas)`, 'success');
+                } else {
+                    this.showMessage(data.detail || data.error || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao enviar layout:', e);
+                this.showMessage('Erro de conexao', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        async clearLayout() {
+            try {
+                const response = await fetch('/api/layout/clear', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    this.showMessage('Textos limpos!', 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao limpar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao limpar layout:', e);
+                this.showMessage('Erro ao limpar', 'error');
+            }
+        },
+
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+            setTimeout(() => this.clearMessage(), 3000);
+        },
+
+        clearMessage() {
+            this.message = '';
+            this.messageType = '';
+        }
+    };
+}
+
 // Expose utils globally for template use
 window.formatTime = utils.formatTime;
 window.formatFileSize = utils.formatFileSize;
