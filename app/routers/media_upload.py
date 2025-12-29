@@ -81,6 +81,11 @@ class ConvertRequest(BaseModel):
     id: str
     start: float
     end: float
+    # Coordenadas de crop (opcional)
+    crop_x: int | None = None
+    crop_y: int | None = None
+    crop_width: int | None = None
+    crop_height: int | None = None
 
 
 class ConvertResponse(BaseModel):
@@ -355,7 +360,11 @@ async def convert_video(request: ConvertRequest):
                     path,
                     request.start,
                     request.end,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    crop_x=request.crop_x,
+                    crop_y=request.crop_y,
+                    crop_width=request.crop_width,
+                    crop_height=request.crop_height
                 )
                 result["path"] = output_path
                 result["frames"] = frames
@@ -436,7 +445,13 @@ async def convert_video_sync(request: ConvertRequest):
             convert_video_to_gif,
             path,
             request.start,
-            request.end
+            request.end,
+            None,  # options
+            None,  # progress_callback
+            request.crop_x,
+            request.crop_y,
+            request.crop_width,
+            request.crop_height
         )
 
         media_uploads.update(

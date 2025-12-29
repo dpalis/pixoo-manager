@@ -365,6 +365,14 @@ button.secondary:hover {
     overflow: hidden;
 }
 
+.crop-container.crop-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--text-secondary);
+}
+
 .crop-source {
     display: block;
     max-width: 100%;

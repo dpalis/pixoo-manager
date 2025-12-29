@@ -613,6 +613,18 @@ function mediaUpload() {
         originalGifUploadId: null,
         originalGifPreviewUrl: null,
         originalGifTotalFrames: 0,
+        // GIF crop state (para selecionar área antes de converter)
+        gifRawUploadId: null,
+        gifFirstFrameUrl: null,
+        gifCropApplied: false,
+        gifCropApplying: false,
+        gifOriginalWidth: 0,
+        gifOriginalHeight: 0,
+        // Video crop state (para selecionar área antes de converter)
+        videoCropApplied: false,
+        videoCropApplying: false,
+        videoCropData: null,  // {x, y, width, height}
+        videoFrameUrl: null,  // URL do frame extraído para cropper
 
         async init() {
             await this.restoreState();
@@ -676,7 +688,7 @@ function mediaUpload() {
         },
 
         get hasFile() {
-            return this.uploadId !== null;
+            return this.uploadId !== null || this.gifRawUploadId !== null || this.originalImageUrl !== null;
         },
 
         get segmentDuration() {
@@ -690,7 +702,7 @@ function mediaUpload() {
         },
 
         get canSend() {
-            return (this.mediaType === 'gif' && this.uploadId && !this.needsTrim) ||
+            return (this.mediaType === 'gif' && this.uploadId && this.gifCropApplied && !this.needsTrim) ||
                    (this.mediaType === 'image' && this.uploadId) ||
                    (this.mediaType === 'video' && this.converted);
         },
@@ -715,7 +727,7 @@ function mediaUpload() {
         },
 
         async processFile(file) {
-            // GIF and WebP may be animated - upload directly without crop
+            // GIF and WebP may be animated - show cropper first
             const animatedTypes = ['image/gif', 'image/webp'];
             // Static images show cropper first
             const imageTypes = ['image/png', 'image/jpeg'];
@@ -748,16 +760,58 @@ function mediaUpload() {
                 return;
             }
 
-            // GIFs e videos fazem upload direto
+            // GIFs mostram cropper no primeiro frame
+            if (isGif) {
+                this.mediaType = 'gif';
+                this.gifCropApplied = false;
+                this.fileInfo = file.name;
+                this.showMessage('Enviando GIF...', 'info');
+
+                // Upload raw (sem conversão) para obter primeiro frame
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/api/gif/upload-raw', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        this.showMessage(error.detail || 'Erro no upload', 'error');
+                        return;
+                    }
+
+                    const data = await response.json();
+                    this.gifRawUploadId = data.id;
+                    this.gifFirstFrameUrl = data.first_frame_url;
+                    this.gifOriginalWidth = data.width;
+                    this.gifOriginalHeight = data.height;
+                    this.gifTotalFrames = data.frames;
+                    this.gifDurationMs = data.duration_ms;
+                    this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
+                    this.clearMessage();
+
+                    // Inicializar cropper no primeiro frame
+                    this.$nextTick(() => {
+                        this.initGifCropper();
+                    });
+                } catch (e) {
+                    console.error('Erro no upload:', e);
+                    this.showMessage('Erro ao enviar arquivo', 'error');
+                }
+                return;
+            }
+
+            // Videos fazem upload direto e mostram cropper
             const formData = new FormData();
             formData.append('file', file);
 
             try {
                 this.showMessage('Enviando arquivo...', 'info');
 
-                // GIFs usam endpoint dedicado, outros usam /api/media
-                const endpoint = isGif ? '/api/gif/upload' : '/api/media/upload';
-                const response = await fetch(endpoint, {
+                const response = await fetch('/api/media/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -771,37 +825,22 @@ function mediaUpload() {
                 const data = await response.json();
                 this.uploadId = data.id;
 
-                if (isGif) {
-                    this.mediaType = 'gif';
-                    this.previewUrl = data.preview_url;
-                    this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
+                // Video - primeiro mostra cropper
+                this.mediaType = 'video';
+                this.videoUrl = URL.createObjectURL(file);
+                this.videoDuration = data.duration;
+                this.maxDuration = data.max_duration || 5;
+                this.endTime = Math.min(this.maxDuration, data.duration);
+                this.endTimeStr = utils.formatTime(this.endTime);
+                this.fileInfo = `${data.width}x${data.height} - ${data.duration.toFixed(1)}s`;
+                this.videoCropApplied = false;
+                this.videoCropData = null;
+                this.clearMessage();
 
-                    if (data.needs_trim) {
-                        // GIF precisa ser recortado
-                        this.needsTrim = true;
-                        this.gifTotalFrames = data.frames;
-                        this.gifDurationMs = data.duration_ms;
-                        this.startFrame = 0;
-                        this.endFrame = Math.min(40, data.frames);
-                        this.converted = false;
-                        this.showMessage(`GIF tem ${data.frames} frames. Selecione um trecho de até 40 frames.`, 'info');
-                    } else {
-                        // GIF já está OK
-                        this.needsTrim = false;
-                        this.converted = true;
-                        this.clearMessage();
-                    }
-                } else {
-                    // Video
-                    this.mediaType = 'video';
-                    this.videoUrl = URL.createObjectURL(file);
-                    this.videoDuration = data.duration;
-                    this.maxDuration = data.max_duration || 5;
-                    this.endTime = Math.min(this.maxDuration, data.duration);
-                    this.endTimeStr = utils.formatTime(this.endTime);
-                    this.fileInfo = `${data.width}x${data.height} - ${data.duration.toFixed(1)}s`;
-                    this.clearMessage();
-                }
+                // Aguardar vídeo carregar e extrair frame para cropper
+                this.$nextTick(() => {
+                    this.initVideoCropper();
+                });
 
             } catch (e) {
                 console.error('Erro no upload:', e);
@@ -875,6 +914,162 @@ function mediaUpload() {
             }
         },
 
+        initGifCropper() {
+            const image = this.$refs.gifCropImage;
+            if (!image || this.cropper) return;
+
+            this.cropper = new Cropper(image, {
+                aspectRatio: 1,
+                viewMode: 1,
+                autoCropArea: 0.8,
+                responsive: true
+            });
+        },
+
+        async applyGifCrop() {
+            if (!this.cropper || this.gifCropApplying || !this.gifRawUploadId) return;
+
+            this.gifCropApplying = true;
+            this.showMessage('Processando recorte...', 'info');
+
+            try {
+                // Obter dados do crop
+                const cropData = this.cropper.getData(true); // true = rounded values
+
+                // Enviar para o backend aplicar crop em todos os frames
+                const response = await fetch('/api/gif/crop-and-convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: this.gifRawUploadId,
+                        crop_x: Math.round(cropData.x),
+                        crop_y: Math.round(cropData.y),
+                        crop_width: Math.round(cropData.width),
+                        crop_height: Math.round(cropData.height)
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.showMessage(error.detail || 'Erro no recorte', 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                this.uploadId = data.id;
+                this.previewUrl = data.preview_url;
+                this.fileInfo = `${data.width}x${data.height} - ${data.frames} frames`;
+                this.gifCropApplied = true;
+
+                // Destruir cropper
+                if (this.cropper) {
+                    this.cropper.destroy();
+                    this.cropper = null;
+                }
+
+                // Verificar se precisa trim
+                if (data.needs_trim) {
+                    this.needsTrim = true;
+                    this.startFrame = 0;
+                    this.endFrame = Math.min(40, data.frames);
+                    this.converted = false;
+                    this.showMessage(`GIF tem ${data.frames} frames. Selecione um trecho de até 40 frames.`, 'info');
+                } else {
+                    this.needsTrim = false;
+                    this.converted = true;
+                    this.showMessage('Recorte aplicado!', 'success');
+                }
+
+            } catch (e) {
+                console.error('Erro ao aplicar recorte:', e);
+                this.showMessage('Erro ao processar recorte', 'error');
+            } finally {
+                this.gifCropApplying = false;
+            }
+        },
+
+        initVideoCropper() {
+            // Aguardar vídeo carregar para extrair frame
+            const video = this.$refs.videoForCrop;
+            if (!video) return;
+
+            // Quando vídeo carregar, extrair frame
+            video.onloadeddata = () => {
+                this.extractVideoFrame();
+            };
+
+            // Se já carregou, extrair imediatamente
+            if (video.readyState >= 2) {
+                this.extractVideoFrame();
+            }
+        },
+
+        extractVideoFrame() {
+            const video = this.$refs.videoForCrop;
+            if (!video) return;
+
+            // Criar canvas para extrair frame
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            // Converter para URL
+            this.videoFrameUrl = canvas.toDataURL('image/png');
+
+            // Inicializar cropper após render
+            this.$nextTick(() => {
+                const image = this.$refs.videoCropImage;
+                if (!image || this.cropper) return;
+
+                this.cropper = new Cropper(image, {
+                    aspectRatio: 1,
+                    viewMode: 1,
+                    autoCropArea: 0.8,
+                    responsive: true
+                });
+            });
+        },
+
+        applyVideoCrop() {
+            if (!this.cropper || this.videoCropApplying) return;
+
+            this.videoCropApplying = true;
+
+            try {
+                // Obter dados do crop
+                const cropData = this.cropper.getData(true);
+
+                // Guardar coordenadas para usar na conversão
+                this.videoCropData = {
+                    x: Math.round(cropData.x),
+                    y: Math.round(cropData.y),
+                    width: Math.round(cropData.width),
+                    height: Math.round(cropData.height)
+                };
+
+                this.videoCropApplied = true;
+
+                // Destruir cropper
+                if (this.cropper) {
+                    this.cropper.destroy();
+                    this.cropper = null;
+                }
+
+                // Limpar URL do frame
+                this.videoFrameUrl = null;
+
+                this.showMessage('Área de recorte selecionada. Agora selecione o trecho do vídeo.', 'success');
+
+            } catch (e) {
+                console.error('Erro ao aplicar recorte:', e);
+                this.showMessage('Erro ao processar recorte', 'error');
+            } finally {
+                this.videoCropApplying = false;
+            }
+        },
+
         onVideoLoaded() {
             const video = this.$refs.videoPlayer;
             if (video) {
@@ -907,15 +1102,26 @@ function mediaUpload() {
             this.convertPhase = 'Iniciando...';
 
             try {
+                // Construir request com dados de crop se disponíveis
+                const requestBody = {
+                    id: this.uploadId,
+                    start: this.startTime,
+                    end: this.endTime
+                };
+
+                // Incluir coordenadas de crop se definidas
+                if (this.videoCropData) {
+                    requestBody.crop_x = this.videoCropData.x;
+                    requestBody.crop_y = this.videoCropData.y;
+                    requestBody.crop_width = this.videoCropData.width;
+                    requestBody.crop_height = this.videoCropData.height;
+                }
+
                 // Usar endpoint sincrono por simplicidade
                 const response = await fetch('/api/media/convert-sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: this.uploadId,
-                        start: this.startTime,
-                        end: this.endTime
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
@@ -1034,6 +1240,20 @@ function mediaUpload() {
             this.originalGifUploadId = null;
             this.originalGifPreviewUrl = null;
             this.originalGifTotalFrames = 0;
+
+            // Reset estado do crop (GIF)
+            this.gifRawUploadId = null;
+            this.gifFirstFrameUrl = null;
+            this.gifCropApplied = false;
+            this.gifCropApplying = false;
+            this.gifOriginalWidth = 0;
+            this.gifOriginalHeight = 0;
+
+            // Reset estado do crop (Video)
+            this.videoCropApplied = false;
+            this.videoCropApplying = false;
+            this.videoCropData = null;
+            this.videoFrameUrl = null;
 
             this.clearMessage();
             sessionStorage.removeItem('mediaUpload');

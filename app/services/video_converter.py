@@ -153,7 +153,11 @@ def convert_video_to_gif(
     start: float,
     end: float,
     options: Optional[ConvertOptions] = None,
-    progress_callback: Optional[Callable[[str, float], None]] = None
+    progress_callback: Optional[Callable[[str, float], None]] = None,
+    crop_x: Optional[int] = None,
+    crop_y: Optional[int] = None,
+    crop_width: Optional[int] = None,
+    crop_height: Optional[int] = None,
 ) -> Tuple[Path, int]:
     """
     Converte um segmento de video para GIF 64x64.
@@ -166,6 +170,10 @@ def convert_video_to_gif(
         end: Tempo final em segundos
         options: Opcoes de conversao (led_optimize, max_colors)
         progress_callback: Callback (fase, progresso) - fase: "extracting", "processing", "saving"
+        crop_x: Coordenada X do crop (opcional)
+        crop_y: Coordenada Y do crop (opcional)
+        crop_width: Largura do crop (opcional)
+        crop_height: Altura do crop (opcional)
 
     Returns:
         Tupla (caminho do GIF gerado, numero de frames)
@@ -176,6 +184,9 @@ def convert_video_to_gif(
     """
     if options is None:
         options = ConvertOptions(led_optimize=True)
+
+    # Verificar se crop está completo
+    has_crop = all(v is not None for v in [crop_x, crop_y, crop_width, crop_height])
 
     duration = end - start
 
@@ -198,6 +209,16 @@ def convert_video_to_gif(
         with VideoFileClip(str(path)) as clip:
             # Cortar o segmento
             segment = clip.subclipped(start, end)
+
+            # Aplicar crop se especificado
+            if has_crop:
+                # MoviePy crop usa x1, y1, x2, y2
+                segment = segment.cropped(
+                    x1=crop_x,
+                    y1=crop_y,
+                    x2=crop_x + crop_width,
+                    y2=crop_y + crop_height
+                )
 
             # Calcular fps para nao exceder MAX_CONVERT_FRAMES
             target_fps = min(segment.fps, MAX_CONVERT_FRAMES / duration)
