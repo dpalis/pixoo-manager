@@ -1361,6 +1361,22 @@ function mediaUpload() {
             return this.selectedFrameCount > 40;
         },
 
+        // Valida e ajusta frames quando startFrame muda
+        validateStartFrame() {
+            // Garante que startFrame não ultrapasse endFrame - 1
+            if (this.startFrame >= this.endFrame) {
+                this.startFrame = Math.max(0, this.endFrame - 1);
+            }
+        },
+
+        // Valida e ajusta frames quando endFrame muda
+        validateEndFrame() {
+            // Garante que endFrame não seja menor que startFrame + 1
+            if (this.endFrame <= this.startFrame) {
+                this.endFrame = Math.min(this.gifTotalFrames, this.startFrame + 1);
+            }
+        },
+
         showMessage(text, type) {
             utils.showMessage(this, text, type);
         },

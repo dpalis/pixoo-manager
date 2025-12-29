@@ -154,11 +154,11 @@
                             <div class="frame-inputs">
                                 <label>
                                     Frame inicial:
-                                    <input type="number" x-model.number="startFrame" min="0" :max="gifTotalFrames - 1">
+                                    <input type="number" x-model.number="startFrame" @change="validateStartFrame()" min="0" :max="gifTotalFrames - 1">
                                 </label>
                                 <label>
                                     Frame final:
-                                    <input type="number" x-model.number="endFrame" :min="startFrame + 1" :max="gifTotalFrames">
+                                    <input type="number" x-model.number="endFrame" @change="validateEndFrame()" min="1" :max="gifTotalFrames">
                                 </label>
                                 <span class="frame-count" :class="{ 'error': framesTooMany }">
                                     <span x-text="selectedFrameCount"></span> frames
@@ -171,6 +171,7 @@
                                 <input
                                     type="range"
                                     x-model.number="startFrame"
+                                    @input="validateStartFrame()"
                                     min="0"
                                     :max="gifTotalFrames - 1"
                                     class="slider-start"
@@ -178,7 +179,8 @@
                                 <input
                                     type="range"
                                     x-model.number="endFrame"
-                                    :min="startFrame + 1"
+                                    @input="validateEndFrame()"
+                                    min="1"
                                     :max="gifTotalFrames"
                                     class="slider-end"
                                 >
