@@ -144,27 +144,15 @@
                 <!-- Editor de GIF (precisa de trim, após crop) -->
                 <template x-if="mediaType === 'gif' && previewUrl && gifCropApplied && needsTrim">
                     <div class="gif-editor">
-                        <!-- Preview de frames: início e fim -->
-                        <div class="frame-previews">
-                            <div class="frame-preview-item">
-                                <span class="frame-label">Frame <span x-text="startFrame"></span></span>
-                                <img
-                                    x-show="startFramePreviewUrl"
-                                    :src="startFramePreviewUrl"
-                                    alt="Frame inicial"
-                                    class="frame-preview-img"
-                                >
-                            </div>
-                            <div class="frame-preview-arrow">→</div>
-                            <div class="frame-preview-item">
-                                <span class="frame-label">Frame <span x-text="endFrame - 1"></span></span>
-                                <img
-                                    x-show="endFramePreviewUrl"
-                                    :src="endFramePreviewUrl"
-                                    alt="Frame final"
-                                    class="frame-preview-img"
-                                >
-                            </div>
+                        <!-- Preview de frame único (muda conforme slider ativo) -->
+                        <div class="frame-preview-single">
+                            <span class="frame-label">Frame <span x-text="currentFrameIndex"></span></span>
+                            <img
+                                x-show="currentFramePreviewUrl"
+                                :src="currentFramePreviewUrl"
+                                alt="Preview do frame"
+                                class="frame-preview-img"
+                            >
                         </div>
                         <div class="file-info">
                             <p x-text="fileName"></p>

@@ -613,9 +613,9 @@ function mediaUpload() {
         originalGifUploadId: null,
         originalGifPreviewUrl: null,
         originalGifTotalFrames: 0,
-        // Frame preview URLs (para feedback visual durante trim)
-        startFramePreviewUrl: null,
-        endFramePreviewUrl: null,
+        // Frame preview (único frame, muda conforme slider ativo)
+        currentFramePreviewUrl: null,
+        currentFrameIndex: null,
         // GIF crop state (para selecionar área antes de converter)
         gifRawUploadId: null,
         gifFirstFrameUrl: null,
@@ -1247,8 +1247,8 @@ function mediaUpload() {
             this.originalGifPreviewUrl = null;
             this.originalGifTotalFrames = 0;
             // Reset frame preview URLs
-            this.startFramePreviewUrl = null;
-            this.endFramePreviewUrl = null;
+            this.currentFramePreviewUrl = null;
+            this.currentFrameIndex = null;
 
             // Reset estado do crop (GIF)
             this.gifRawUploadId = null;
@@ -1378,8 +1378,8 @@ function mediaUpload() {
             if (this.startFrame >= this.endFrame) {
                 this.startFrame = Math.max(0, this.endFrame - 1);
             }
-            // Atualizar preview do frame inicial
-            this.updateFramePreview('start');
+            // Mostra o frame do slider que foi movido
+            this.showFramePreview(this.startFrame);
         },
 
         // Valida e ajusta frames quando endFrame muda
@@ -1388,29 +1388,21 @@ function mediaUpload() {
             if (this.endFrame <= this.startFrame) {
                 this.endFrame = Math.min(this.gifTotalFrames, this.startFrame + 1);
             }
-            // Atualizar preview do frame final
-            this.updateFramePreview('end');
+            // endFrame é exclusivo, então mostramos endFrame - 1
+            this.showFramePreview(Math.max(0, this.endFrame - 1));
         },
 
-        // Atualiza preview de um frame específico
-        updateFramePreview(type) {
+        // Mostra preview de um frame específico (um único preview)
+        showFramePreview(frameIndex) {
             if (!this.uploadId) return;
-
-            if (type === 'start') {
-                // Adicionar timestamp para evitar cache
-                this.startFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${this.startFrame}?t=${Date.now()}`;
-            } else if (type === 'end') {
-                // endFrame é exclusivo, então mostramos endFrame - 1
-                const frameIndex = Math.max(0, this.endFrame - 1);
-                this.endFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${frameIndex}?t=${Date.now()}`;
-            }
+            this.currentFrameIndex = frameIndex;
+            this.currentFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${frameIndex}?t=${Date.now()}`;
         },
 
-        // Inicializa previews de frames quando entra no modo trim
+        // Inicializa preview quando entra no modo trim (mostra primeiro frame)
         initFramePreviews() {
             if (this.uploadId && this.needsTrim) {
-                this.updateFramePreview('start');
-                this.updateFramePreview('end');
+                this.showFramePreview(this.startFrame);
             }
         },
 
