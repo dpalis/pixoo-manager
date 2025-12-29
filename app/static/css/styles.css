@@ -600,8 +600,9 @@ button.secondary:hover {
 }
 
 .frame-preview-img {
-    width: 256px;
-    height: 256px;
+    width: 512px;
+    height: 512px;
+    max-width: 100%;
     object-fit: contain;
     border-radius: 4px;
     background: var(--bg-tertiary);
