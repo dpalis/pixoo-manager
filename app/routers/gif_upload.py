@@ -22,6 +22,7 @@ from app.services.gif_converter import (
     convert_gif,
     convert_image,
     get_first_frame,
+    get_frame_by_index,
     is_pixoo_ready,
     trim_gif,
     ConvertOptions,
@@ -446,6 +447,44 @@ async def get_first_frame_endpoint(upload_id: str):
                 "Cache-Control": "public, max-age=3600"
             }
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao extrair frame: {e}")
+
+
+@router.get("/frame/{upload_id}/{frame_num}")
+async def get_frame_endpoint(upload_id: str, frame_num: int):
+    """
+    Retorna um frame específico do GIF como imagem PNG.
+
+    Usado para preview de frames durante seleção de trim.
+
+    Args:
+        upload_id: ID do upload
+        frame_num: Número do frame (0-indexed)
+    """
+    _, path = get_upload_or_404(gif_uploads, upload_id)
+
+    try:
+        import io
+
+        # Extrair frame específico
+        frame = await asyncio.to_thread(get_frame_by_index, path, frame_num)
+
+        # Converter para PNG
+        buffer = io.BytesIO()
+        frame.convert('RGB').save(buffer, format='PNG')
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="image/png",
+            headers={
+                "Content-Disposition": f"inline; filename=frame_{upload_id}_{frame_num}.png",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    except ConversionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao extrair frame: {e}")
 

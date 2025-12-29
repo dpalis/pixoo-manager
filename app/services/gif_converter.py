@@ -142,6 +142,34 @@ def get_first_frame(path: Path) -> Image.Image:
         return img.convert('RGBA').copy()
 
 
+def get_frame_by_index(path: Path, frame_index: int) -> Image.Image:
+    """
+    Extrai um frame específico de um GIF pelo índice.
+
+    Args:
+        path: Caminho do arquivo GIF
+        frame_index: Índice do frame (0-based)
+
+    Returns:
+        Frame como imagem PIL (RGBA)
+
+    Raises:
+        ConversionError: Se o índice for inválido
+    """
+    with Image.open(path) as img:
+        n_frames = getattr(img, 'n_frames', 1)
+
+        if frame_index < 0 or frame_index >= n_frames:
+            raise ConversionError(
+                f"Índice de frame inválido: {frame_index}. "
+                f"GIF tem {n_frames} frames (0-{n_frames - 1})."
+            )
+
+        # Navegar até o frame desejado
+        img.seek(frame_index)
+        return img.convert('RGBA').copy()
+
+
 def trim_gif(
     path: Path,
     start_frame: int,

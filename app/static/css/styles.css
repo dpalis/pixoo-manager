@@ -584,6 +584,43 @@ button.secondary:hover {
     align-items: center;
 }
 
+/* Frame previews para trim de GIF */
+.frame-previews {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.5rem;
+}
+
+.frame-preview-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.frame-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.frame-preview-img {
+    width: 128px;
+    height: 128px;
+    object-fit: contain;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    image-rendering: pixelated;
+}
+
+.frame-preview-arrow {
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    padding: 0 0.5rem;
+}
+
 .trim-controls {
     width: 100%;
     background: var(--bg-dark);

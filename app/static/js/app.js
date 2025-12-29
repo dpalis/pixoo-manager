@@ -613,6 +613,9 @@ function mediaUpload() {
         originalGifUploadId: null,
         originalGifPreviewUrl: null,
         originalGifTotalFrames: 0,
+        // Frame preview URLs (para feedback visual durante trim)
+        startFramePreviewUrl: null,
+        endFramePreviewUrl: null,
         // GIF crop state (para selecionar área antes de converter)
         gifRawUploadId: null,
         gifFirstFrameUrl: null,
@@ -970,9 +973,12 @@ function mediaUpload() {
                 // Verificar se precisa trim
                 if (data.needs_trim) {
                     this.needsTrim = true;
+                    this.gifTotalFrames = data.frames;
                     this.startFrame = 0;
                     this.endFrame = Math.min(40, data.frames);
                     this.converted = false;
+                    // Inicializar previews de frames após um tick para garantir que uploadId está setado
+                    this.$nextTick(() => this.initFramePreviews());
                     this.showMessage(`GIF tem ${data.frames} frames. Selecione um trecho de até 40 frames.`, 'info');
                 } else {
                     this.needsTrim = false;
@@ -1240,6 +1246,9 @@ function mediaUpload() {
             this.originalGifUploadId = null;
             this.originalGifPreviewUrl = null;
             this.originalGifTotalFrames = 0;
+            // Reset frame preview URLs
+            this.startFramePreviewUrl = null;
+            this.endFramePreviewUrl = null;
 
             // Reset estado do crop (GIF)
             this.gifRawUploadId = null;
@@ -1350,6 +1359,8 @@ function mediaUpload() {
             this.startFrame = 0;
             this.endFrame = Math.min(40, this.originalGifTotalFrames);
             this.fileInfo = `64x64 - ${this.originalGifTotalFrames} frames`;
+            // Reinicializar previews de frames
+            this.$nextTick(() => this.initFramePreviews());
             this.showMessage('Recorte limpo. Selecione novos frames.', 'info');
         },
 
@@ -1367,6 +1378,8 @@ function mediaUpload() {
             if (this.startFrame >= this.endFrame) {
                 this.startFrame = Math.max(0, this.endFrame - 1);
             }
+            // Atualizar preview do frame inicial
+            this.updateFramePreview('start');
         },
 
         // Valida e ajusta frames quando endFrame muda
@@ -1374,6 +1387,30 @@ function mediaUpload() {
             // Garante que endFrame não seja menor que startFrame + 1
             if (this.endFrame <= this.startFrame) {
                 this.endFrame = Math.min(this.gifTotalFrames, this.startFrame + 1);
+            }
+            // Atualizar preview do frame final
+            this.updateFramePreview('end');
+        },
+
+        // Atualiza preview de um frame específico
+        updateFramePreview(type) {
+            if (!this.uploadId) return;
+
+            if (type === 'start') {
+                // Adicionar timestamp para evitar cache
+                this.startFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${this.startFrame}?t=${Date.now()}`;
+            } else if (type === 'end') {
+                // endFrame é exclusivo, então mostramos endFrame - 1
+                const frameIndex = Math.max(0, this.endFrame - 1);
+                this.endFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${frameIndex}?t=${Date.now()}`;
+            }
+        },
+
+        // Inicializa previews de frames quando entra no modo trim
+        initFramePreviews() {
+            if (this.uploadId && this.needsTrim) {
+                this.updateFramePreview('start');
+                this.updateFramePreview('end');
             }
         },
 
