@@ -636,6 +636,14 @@ function mediaUpload() {
             this.$watch('previewUrl', () => this.saveState());
             this.$watch('converted', () => this.saveState());
             this.$watch('convertedPreviewUrl', () => this.saveState());
+            // GIF-specific watchers
+            this.$watch('gifRawUploadId', () => this.saveState());
+            this.$watch('gifCropApplied', () => this.saveState());
+            this.$watch('gifTotalFrames', () => this.saveState());
+            this.$watch('startFrame', () => this.saveState());
+            this.$watch('endFrame', () => this.saveState());
+            this.$watch('needsTrim', () => this.saveState());
+            this.$watch('trimApplied', () => this.saveState());
         },
 
         saveState() {
@@ -653,7 +661,16 @@ function mediaUpload() {
                 converted: this.converted,
                 convertedPreviewUrl: this.convertedPreviewUrl,
                 convertedFrames: this.convertedFrames,
-                cropApplied: this.cropApplied
+                cropApplied: this.cropApplied,
+                // GIF-specific state
+                gifRawUploadId: this.gifRawUploadId,
+                gifFirstFrameUrl: this.gifFirstFrameUrl,
+                gifCropApplied: this.gifCropApplied,
+                gifTotalFrames: this.gifTotalFrames,
+                startFrame: this.startFrame,
+                endFrame: this.endFrame,
+                needsTrim: this.needsTrim,
+                trimApplied: this.trimApplied
                 // Não salvar: file (File object), videoUrl (blob URL), cropper, originalImageUrl
             };
             sessionStorage.setItem('mediaUpload', JSON.stringify(state));
@@ -683,7 +700,22 @@ function mediaUpload() {
                     }
                 }
 
+                // Validar gifRawUploadId (GIF antes do crop)
+                if (state.gifRawUploadId && !state.uploadId) {
+                    const response = await fetch(`/api/gif/preview/${state.gifRawUploadId}`, { method: 'HEAD' });
+                    if (!response.ok) {
+                        console.log('GIF raw upload expirado, limpando estado local');
+                        sessionStorage.removeItem('mediaUpload');
+                        return;
+                    }
+                }
+
                 Object.assign(this, state);
+
+                // Inicializar frame preview se estiver no modo trim
+                if (this.needsTrim && this.uploadId) {
+                    this.$nextTick(() => this.initFramePreviews());
+                }
             } catch (e) {
                 console.error('Erro ao restaurar estado:', e);
                 sessionStorage.removeItem('mediaUpload');
