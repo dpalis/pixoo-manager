@@ -550,10 +550,10 @@
                     <small class="char-counter" x-text="`${text.length}/500 caracteres`"></small>
                 </div>
 
-                <!-- Controles inline: Cor + Fonte -->
+                <!-- Controles inline: Cor do Texto + Cor de Fundo -->
                 <div class="text-controls">
                     <div class="control-group">
-                        <label for="colorInput">Cor</label>
+                        <label for="colorInput">Cor do Texto</label>
                         <input
                             type="color"
                             id="colorInput"
@@ -562,14 +562,27 @@
                         >
                     </div>
                     <div class="control-group">
-                        <label for="fontSelect">Fonte</label>
-                        <select id="fontSelect" x-model="font" @change="updatePreview()">
-                            <option value="0">Padrao</option>
-                            <option value="2">Compacta</option>
-                            <option value="4">Larga</option>
-                            <option value="7">Pequena</option>
-                        </select>
+                        <label for="bgColorInput">Cor de Fundo</label>
+                        <input
+                            type="color"
+                            id="bgColorInput"
+                            x-model="backgroundColor"
+                            @input="updatePreview()"
+                        >
                     </div>
+                </div>
+
+                <!-- Controle de Estilo de Fonte -->
+                <div class="form-group">
+                    <label for="fontSelect">Estilo da Fonte</label>
+                    <select id="fontSelect" x-model="fontStyle" @change="updatePreview()">
+                        <option value="0">Normal</option>
+                        <option value="2">Compacto</option>
+                        <option value="4">Largo</option>
+                        <option value="5">Retro/Pixel</option>
+                        <option value="7">Pequeno</option>
+                        <option value="8">Fino</option>
+                    </select>
                 </div>
 
                 <!-- Velocidade -->
@@ -615,7 +628,7 @@
                     <div class="canvas-wrapper">
                         <canvas x-ref="previewCanvas" width="320" height="320"></canvas>
                     </div>
-                    <small class="preview-disclaimer">O preview e uma simulacao aproximada. O resultado no Pixoo pode variar.</small>
+                    <small class="preview-disclaimer">O preview é uma simulação aproximada. O resultado no Pixoo pode variar.</small>
                 </div>
 
                 <!-- Acoes -->
