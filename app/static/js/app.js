@@ -1859,7 +1859,6 @@ function textDisplay() {
         color: '#FFFFFF',
         backgroundColor: '#000000',
         speed: 150,
-        font: 0,
         fontStyle: 0,
         y: 28,
         sending: false,
@@ -1917,25 +1916,32 @@ function textDisplay() {
             if (this.text) {
                 ctx.fillStyle = this.color;
 
-                // Font size based on size selection
-                let fontSize;
-                switch (parseInt(this.font)) {
-                    case 7: fontSize = 28; break;  // Pequeno
-                    case 4: fontSize = 48; break;  // Grande
-                    default: fontSize = 40; break; // Medio (0)
-                }
-
-                // Font weight/style based on style selection
+                // Font size and style based on fontStyle selection
+                // IDs: 0=Normal, 2=Compacto, 4=Largo, 5=Retro, 7=Pequeno, 8=Fino
+                let fontSize = 40;
                 let fontWeight = 'normal';
                 let fontFamily = 'monospace';
+
                 switch (parseInt(this.fontStyle)) {
+                    case 0:  // Normal
+                        fontSize = 40;
+                        break;
                     case 2:  // Compacto
+                        fontSize = 36;
                         fontFamily = 'Arial Narrow, sans-serif';
                         break;
+                    case 4:  // Largo
+                        fontSize = 48;
+                        break;
                     case 5:  // Retro/Pixel
+                        fontSize = 40;
                         fontFamily = 'Courier New, monospace';
                         break;
+                    case 7:  // Pequeno
+                        fontSize = 28;
+                        break;
                     case 8:  // Fino
+                        fontSize = 36;
                         fontWeight = '300';
                         break;
                 }
