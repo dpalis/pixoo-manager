@@ -128,6 +128,34 @@ def load_gif_frames(path: Path) -> Tuple[List[Image.Image], List[int]]:
     return frames, durations
 
 
+def get_frame_by_index(path: Path, frame_index: int) -> Image.Image:
+    """
+    Extrai um frame específico de um GIF pelo índice.
+
+    Args:
+        path: Caminho do arquivo GIF
+        frame_index: Índice do frame (0-based)
+
+    Returns:
+        Frame como imagem PIL (RGBA)
+
+    Raises:
+        ConversionError: Se o índice for inválido
+    """
+    with Image.open(path) as img:
+        n_frames = getattr(img, 'n_frames', 1)
+
+        if frame_index < 0 or frame_index >= n_frames:
+            raise ConversionError(
+                f"Índice de frame inválido: {frame_index}. "
+                f"GIF tem {n_frames} frames (0-{n_frames - 1})."
+            )
+
+        # Navegar até o frame desejado
+        img.seek(frame_index)
+        return img.convert('RGBA').copy()
+
+
 def trim_gif(
     path: Path,
     start_frame: int,
@@ -664,10 +692,31 @@ def convert_image_pil(image: Image.Image, options: Optional[ConvertOptions] = No
     return converted
 
 
+def crop_frame(frame: Image.Image, crop_x: int, crop_y: int, crop_width: int, crop_height: int) -> Image.Image:
+    """
+    Aplica crop em um frame.
+
+    Args:
+        frame: Frame PIL
+        crop_x: Coordenada X do canto superior esquerdo
+        crop_y: Coordenada Y do canto superior esquerdo
+        crop_width: Largura da área de crop
+        crop_height: Altura da área de crop
+
+    Returns:
+        Frame recortado
+    """
+    return frame.crop((crop_x, crop_y, crop_x + crop_width, crop_y + crop_height))
+
+
 def convert_gif(
     input_path: Path,
     options: Optional[ConvertOptions] = None,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    crop_x: Optional[int] = None,
+    crop_y: Optional[int] = None,
+    crop_width: Optional[int] = None,
+    crop_height: Optional[int] = None,
 ) -> Tuple[Path, GifMetadata]:
     """
     Converte um GIF para formato Pixoo 64.
@@ -676,6 +725,10 @@ def convert_gif(
         input_path: Caminho do GIF de entrada
         options: Opções de conversão
         progress_callback: Callback para progresso (recebe frame atual e total)
+        crop_x: Coordenada X do crop (opcional)
+        crop_y: Coordenada Y do crop (opcional)
+        crop_width: Largura do crop (opcional)
+        crop_height: Altura do crop (opcional)
 
     Returns:
         Tupla (caminho do GIF convertido, metadados)
@@ -686,6 +739,9 @@ def convert_gif(
     """
     if options is None:
         options = ConvertOptions()
+
+    # Verificar se crop está completo
+    has_crop = all(v is not None for v in [crop_x, crop_y, crop_width, crop_height])
 
     try:
         frames, durations = load_gif_frames(input_path)
@@ -706,6 +762,10 @@ def convert_gif(
     for i, frame in enumerate(frames):
         if progress_callback:
             progress_callback(i + 1, total_frames)
+
+        # Aplicar crop se especificado
+        if has_crop:
+            frame = crop_frame(frame, crop_x, crop_y, crop_width, crop_height)
 
         converted = convert_image_pil(frame, options)
         converted_frames.append(converted)

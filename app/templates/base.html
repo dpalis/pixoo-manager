@@ -111,8 +111,27 @@
                     </div>
                 </div>
 
+                <!-- Cropper para GIF (antes de converter) -->
+                <template x-if="mediaType === 'gif' && gifFirstFrameUrl && !gifCropApplied">
+                    <div class="crop-editor">
+                        <div class="crop-container">
+                            <img x-ref="gifCropImage" :src="gifFirstFrameUrl" alt="Primeiro frame do GIF para recorte" class="crop-source">
+                        </div>
+                        <div class="file-info">
+                            <p x-text="fileName"></p>
+                            <p x-text="fileInfo"></p>
+                        </div>
+                        <div class="crop-actions">
+                            <button @click="applyGifCrop()" class="primary" :disabled="gifCropApplying">
+                                <span x-show="!gifCropApplying">Aplicar Recorte</span>
+                                <span x-show="gifCropApplying">Processando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Preview de GIF (sem necessidade de trim) -->
-                <template x-if="mediaType === 'gif' && previewUrl && !needsTrim">
+                <template x-if="mediaType === 'gif' && previewUrl && gifCropApplied && !needsTrim">
                     <div class="preview-container">
                         <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
                         <div class="file-info">
@@ -122,10 +141,19 @@
                     </div>
                 </template>
 
-                <!-- Editor de GIF (precisa de trim) -->
-                <template x-if="mediaType === 'gif' && previewUrl && needsTrim">
+                <!-- Editor de GIF (precisa de trim, após crop) -->
+                <template x-if="mediaType === 'gif' && previewUrl && gifCropApplied && needsTrim">
                     <div class="gif-editor">
-                        <img :src="previewUrl + '/scaled'" alt="Preview" class="gif-preview-scaled">
+                        <!-- Preview de frame único (muda conforme slider ativo) -->
+                        <div class="frame-preview-single">
+                            <span class="frame-label">Frame <span x-text="currentFrameIndex"></span></span>
+                            <img
+                                x-show="currentFramePreviewUrl"
+                                :src="currentFramePreviewUrl"
+                                alt="Preview do frame"
+                                class="frame-preview-img"
+                            >
+                        </div>
                         <div class="file-info">
                             <p x-text="fileName"></p>
                             <p x-text="fileInfo"></p>
@@ -135,11 +163,11 @@
                             <div class="frame-inputs">
                                 <label>
                                     Frame inicial:
-                                    <input type="number" x-model.number="startFrame" min="0" :max="gifTotalFrames - 1">
+                                    <input type="number" x-model.number="startFrame" @change="validateStartFrame()" min="0" :max="gifTotalFrames - 1">
                                 </label>
                                 <label>
                                     Frame final:
-                                    <input type="number" x-model.number="endFrame" :min="startFrame + 1" :max="gifTotalFrames">
+                                    <input type="number" x-model.number="endFrame" @change="validateEndFrame()" min="1" :max="gifTotalFrames">
                                 </label>
                                 <span class="frame-count" :class="{ 'error': framesTooMany }">
                                     <span x-text="selectedFrameCount"></span> frames
@@ -152,6 +180,7 @@
                                 <input
                                     type="range"
                                     x-model.number="startFrame"
+                                    @input.debounce.150ms="validateStartFrame()"
                                     min="0"
                                     :max="gifTotalFrames - 1"
                                     class="slider-start"
@@ -159,7 +188,8 @@
                                 <input
                                     type="range"
                                     x-model.number="endFrame"
-                                    :min="startFrame + 1"
+                                    @input.debounce.150ms="validateEndFrame()"
+                                    min="1"
                                     :max="gifTotalFrames"
                                     class="slider-end"
                                 >
@@ -194,8 +224,38 @@
                     </div>
                 </template>
 
-                <!-- Preview de video -->
-                <template x-if="mediaType === 'video'">
+                <!-- Cropper para Video (antes de selecionar tempo) -->
+                <template x-if="mediaType === 'video' && videoUrl && !videoCropApplied">
+                    <div class="crop-editor">
+                        <!-- Video oculto para extrair frame -->
+                        <video x-ref="videoForCrop" :src="videoUrl" style="display: none;" muted></video>
+
+                        <!-- Cropper no frame extraído -->
+                        <template x-if="videoFrameUrl">
+                            <div class="crop-container">
+                                <img x-ref="videoCropImage" :src="videoFrameUrl" alt="Frame do vídeo para recorte" class="crop-source">
+                            </div>
+                        </template>
+                        <template x-if="!videoFrameUrl">
+                            <div class="crop-container crop-loading">
+                                <p>Carregando vídeo...</p>
+                            </div>
+                        </template>
+                        <div class="file-info">
+                            <p x-text="fileName"></p>
+                            <p x-text="fileInfo"></p>
+                        </div>
+                        <div class="crop-actions">
+                            <button @click="applyVideoCrop()" class="primary" :disabled="videoCropApplying || !videoFrameUrl">
+                                <span x-show="!videoCropApplying">Aplicar Recorte</span>
+                                <span x-show="videoCropApplying">Processando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Editor de video (após crop) -->
+                <template x-if="mediaType === 'video' && videoCropApplied">
                     <div class="video-editor">
                         <video
                             x-ref="videoPlayer"

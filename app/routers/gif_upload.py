@@ -8,6 +8,7 @@ Endpoints:
 """
 
 import asyncio
+import io
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -21,6 +22,7 @@ from app.services.file_utils import stream_upload_to_temp, cleanup_files
 from app.services.gif_converter import (
     convert_gif,
     convert_image,
+    get_frame_by_index,
     is_pixoo_ready,
     trim_gif,
     ConvertOptions,
@@ -56,6 +58,26 @@ class UploadResponse(BaseModel):
     converted: bool
     needs_trim: bool
     preview_url: str
+
+
+class RawUploadResponse(BaseModel):
+    """Response após upload sem conversão (para cropper)."""
+    id: str
+    width: int
+    height: int
+    frames: int
+    duration_ms: int
+    file_size: int
+    first_frame_url: str
+
+
+class CropAndConvertRequest(BaseModel):
+    """Request para crop e conversão de GIF."""
+    id: str
+    crop_x: int
+    crop_y: int
+    crop_width: int
+    crop_height: int
 
 
 class TrimRequest(BaseModel):
@@ -331,6 +353,179 @@ async def trim_gif_endpoint(request: TrimRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao recortar GIF: {e}")
+
+
+@router.post("/upload-raw", response_model=RawUploadResponse)
+async def upload_gif_raw(file: UploadFile = File(...)):
+    """
+    Upload de GIF sem conversão automática (para uso com cropper).
+
+    O GIF é armazenado como está, permitindo que o usuário
+    selecione a área de crop antes da conversão.
+
+    Rate limited: 10 requisições por minuto.
+    """
+    check_rate_limit(upload_limiter)
+
+    # Validar e salvar arquivo temporário
+    try:
+        temp_path = await stream_upload_to_temp(
+            file,
+            allowed_types=ALLOWED_GIF_TYPES,
+            max_size=MAX_FILE_SIZE
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro no upload: {e}")
+
+    try:
+        from PIL import Image
+
+        # Carregar metadados do GIF
+        with Image.open(temp_path) as img:
+            metadata = GifMetadata(
+                width=img.size[0],
+                height=img.size[1],
+                frames=getattr(img, 'n_frames', 1),
+                duration_ms=img.info.get('duration', 100) * getattr(img, 'n_frames', 1),
+                file_size=temp_path.stat().st_size,
+                path=temp_path
+            )
+
+        # Gerar ID único
+        upload_id = str(uuid.uuid4())[:8]
+
+        # Armazenar info do upload (sem conversão)
+        gif_uploads.set(upload_id, {
+            "path": temp_path,
+            "metadata": metadata,
+            "converted": False,
+            "raw": True  # Marca como upload raw (para cropper)
+        })
+
+        return RawUploadResponse(
+            id=upload_id,
+            width=metadata.width,
+            height=metadata.height,
+            frames=metadata.frames,
+            duration_ms=metadata.duration_ms,
+            file_size=metadata.file_size,
+            first_frame_url=f"/api/gif/frame/{upload_id}/0"
+        )
+
+    except Exception as e:
+        cleanup_files([temp_path])
+        raise HTTPException(status_code=500, detail=f"Erro ao processar GIF: {e}")
+
+
+@router.get("/frame/{upload_id}/{frame_num}")
+async def get_frame_endpoint(upload_id: str, frame_num: int):
+    """
+    Retorna um frame específico do GIF como imagem PNG.
+
+    Usado para preview de frames durante seleção de trim.
+
+    Args:
+        upload_id: ID do upload
+        frame_num: Número do frame (0-indexed)
+    """
+    _, path = get_upload_or_404(gif_uploads, upload_id)
+
+    try:
+        # Extrair frame específico
+        frame = await asyncio.to_thread(get_frame_by_index, path, frame_num)
+
+        # Converter para PNG
+        buffer = io.BytesIO()
+        frame.convert('RGB').save(buffer, format='PNG')
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="image/png",
+            headers={
+                "Content-Disposition": f"inline; filename=frame_{upload_id}_{frame_num}.png",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    except ConversionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao extrair frame: {e}")
+
+
+@router.post("/crop-and-convert", response_model=UploadResponse)
+async def crop_and_convert_gif(request: CropAndConvertRequest):
+    """
+    Aplica crop em todos os frames do GIF e converte para 64x64.
+
+    Recebe coordenadas de crop e aplica em todos os frames,
+    depois redimensiona para o formato Pixoo 64x64.
+
+    Rate limited: 10 requisições por minuto.
+    """
+    check_rate_limit(upload_limiter)
+
+    # Obter upload original
+    upload_data, original_path = get_upload_or_404(gif_uploads, request.id)
+
+    # Validar coordenadas
+    metadata = upload_data.get("metadata")
+    if metadata:
+        if request.crop_x < 0 or request.crop_y < 0:
+            raise HTTPException(status_code=400, detail="Coordenadas não podem ser negativas")
+        if request.crop_x + request.crop_width > metadata.width:
+            raise HTTPException(status_code=400, detail="Crop excede largura da imagem")
+        if request.crop_y + request.crop_height > metadata.height:
+            raise HTTPException(status_code=400, detail="Crop excede altura da imagem")
+        if request.crop_width <= 0 or request.crop_height <= 0:
+            raise HTTPException(status_code=400, detail="Dimensões de crop devem ser positivas")
+
+    try:
+        # Converter com crop (CPU-bound, move para thread)
+        options = ConvertOptions(led_optimize=True, max_frames=1000)
+        output_path, new_metadata = await asyncio.to_thread(
+            convert_gif,
+            original_path,
+            options,
+            None,  # progress_callback
+            request.crop_x,
+            request.crop_y,
+            request.crop_width,
+            request.crop_height
+        )
+
+        # Gerar novo ID para o GIF convertido
+        new_upload_id = str(uuid.uuid4())[:8]
+
+        # Armazenar novo upload
+        gif_uploads.set(new_upload_id, {
+            "path": output_path,
+            "metadata": new_metadata,
+            "converted": True,
+            "cropped_from": request.id
+        })
+
+        # Limpar upload original (raw) para evitar órfãos
+        gif_uploads.delete(request.id)
+
+        return UploadResponse(
+            id=new_upload_id,
+            width=new_metadata.width,
+            height=new_metadata.height,
+            frames=new_metadata.frames,
+            duration_ms=new_metadata.duration_ms,
+            file_size=new_metadata.file_size,
+            converted=True,
+            needs_trim=new_metadata.frames > MAX_UPLOAD_FRAMES,
+            preview_url=f"/api/gif/preview/{new_upload_id}"
+        )
+
+    except ConversionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao converter GIF: {e}")
 
 
 @router.delete("/{upload_id}")

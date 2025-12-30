@@ -178,6 +178,24 @@ class UploadManager:
         with self._lock:
             return len(self._entries)
 
+    def clear(self) -> int:
+        """
+        Remove todas as entradas (para testes).
+
+        Returns:
+            Número de entradas removidas
+        """
+        with self._lock:
+            count = len(self._entries)
+            ids_to_delete = list(self._entries.keys())
+
+            for uid in ids_to_delete:
+                entry = self._entries.get(uid)
+                if entry:
+                    self._delete_entry(uid, entry)
+
+            return count
+
     def __contains__(self, upload_id: str) -> bool:
         """Permite usar 'in' operator."""
         return self.exists(upload_id)

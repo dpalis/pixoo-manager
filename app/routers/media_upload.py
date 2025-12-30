@@ -81,6 +81,11 @@ class ConvertRequest(BaseModel):
     id: str
     start: float
     end: float
+    # Coordenadas de crop (opcional)
+    crop_x: int | None = None
+    crop_y: int | None = None
+    crop_width: int | None = None
+    crop_height: int | None = None
 
 
 class ConvertResponse(BaseModel):
@@ -339,6 +344,18 @@ async def convert_video(request: ConvertRequest):
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Validar coordenadas de crop (se fornecidas)
+    metadata = upload["metadata"]
+    if request.crop_x is not None:
+        if request.crop_x < 0 or request.crop_y < 0:
+            raise HTTPException(status_code=400, detail="Coordenadas não podem ser negativas")
+        if request.crop_x + request.crop_width > metadata.width:
+            raise HTTPException(status_code=400, detail="Crop excede largura do vídeo")
+        if request.crop_y + request.crop_height > metadata.height:
+            raise HTTPException(status_code=400, detail="Crop excede altura do vídeo")
+        if request.crop_width <= 0 or request.crop_height <= 0:
+            raise HTTPException(status_code=400, detail="Dimensões de crop devem ser positivas")
+
     async def generate_progress():
         """Gera eventos SSE durante conversao."""
         progress_state = {"phase": "starting", "progress": 0}
@@ -355,7 +372,11 @@ async def convert_video(request: ConvertRequest):
                     path,
                     request.start,
                     request.end,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    crop_x=request.crop_x,
+                    crop_y=request.crop_y,
+                    crop_width=request.crop_width,
+                    crop_height=request.crop_height
                 )
                 result["path"] = output_path
                 result["frames"] = frames
@@ -430,13 +451,31 @@ async def convert_video_sync(request: ConvertRequest):
         media_uploads.delete(request.id)
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
+    # Validar coordenadas de crop (se fornecidas)
+    metadata = upload["metadata"]
+    if request.crop_x is not None:
+        if request.crop_x < 0 or request.crop_y < 0:
+            raise HTTPException(status_code=400, detail="Coordenadas não podem ser negativas")
+        if request.crop_x + request.crop_width > metadata.width:
+            raise HTTPException(status_code=400, detail="Crop excede largura do vídeo")
+        if request.crop_y + request.crop_height > metadata.height:
+            raise HTTPException(status_code=400, detail="Crop excede altura do vídeo")
+        if request.crop_width <= 0 or request.crop_height <= 0:
+            raise HTTPException(status_code=400, detail="Dimensões de crop devem ser positivas")
+
     try:
         # Operação bloqueante (conversão CPU-intensiva) - move para thread
         output_path, frames = await asyncio.to_thread(
             convert_video_to_gif,
             path,
             request.start,
-            request.end
+            request.end,
+            None,  # options
+            None,  # progress_callback
+            request.crop_x,
+            request.crop_y,
+            request.crop_width,
+            request.crop_height
         )
 
         media_uploads.update(
