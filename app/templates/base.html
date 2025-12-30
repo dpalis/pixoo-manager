@@ -180,7 +180,7 @@
                                 <input
                                     type="range"
                                     x-model.number="startFrame"
-                                    @input="validateStartFrame()"
+                                    @input.debounce.150ms="validateStartFrame()"
                                     min="0"
                                     :max="gifTotalFrames - 1"
                                     class="slider-start"
@@ -188,7 +188,7 @@
                                 <input
                                     type="range"
                                     x-model.number="endFrame"
-                                    @input="validateEndFrame()"
+                                    @input.debounce.150ms="validateEndFrame()"
                                     min="1"
                                     :max="gifTotalFrames"
                                     class="slider-end"

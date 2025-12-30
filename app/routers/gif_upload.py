@@ -541,6 +541,9 @@ async def crop_and_convert_gif(request: CropAndConvertRequest):
             "cropped_from": request.id
         })
 
+        # Limpar upload original (raw) para evitar órfãos
+        gif_uploads.delete(request.id)
+
         return UploadResponse(
             id=new_upload_id,
             width=new_metadata.width,

@@ -1428,7 +1428,8 @@ function mediaUpload() {
         showFramePreview(frameIndex) {
             if (!this.uploadId) return;
             this.currentFrameIndex = frameIndex;
-            this.currentFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${frameIndex}?t=${Date.now()}`;
+            // Sem cache-busting - frames são imutáveis para um dado uploadId
+            this.currentFramePreviewUrl = `/api/gif/frame/${this.uploadId}/${frameIndex}`;
         },
 
         // Inicializa preview quando entra no modo trim (mostra primeiro frame)
