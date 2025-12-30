@@ -644,6 +644,9 @@ function mediaUpload() {
             this.$watch('endFrame', () => this.saveState());
             this.$watch('needsTrim', () => this.saveState());
             this.$watch('trimApplied', () => this.saveState());
+            // Video crop watchers
+            this.$watch('videoCropApplied', () => this.saveState());
+            this.$watch('videoCropData', () => this.saveState());
         },
 
         saveState() {
@@ -670,8 +673,11 @@ function mediaUpload() {
                 startFrame: this.startFrame,
                 endFrame: this.endFrame,
                 needsTrim: this.needsTrim,
-                trimApplied: this.trimApplied
-                // Não salvar: file (File object), videoUrl (blob URL), cropper, originalImageUrl
+                trimApplied: this.trimApplied,
+                // Video crop state
+                videoCropApplied: this.videoCropApplied,
+                videoCropData: this.videoCropData
+                // Não salvar: file (File object), videoUrl (blob URL), cropper, originalImageUrl, videoFrameUrl
             };
             sessionStorage.setItem('mediaUpload', JSON.stringify(state));
         },
@@ -702,7 +708,8 @@ function mediaUpload() {
 
                 // Validar gifRawUploadId (GIF antes do crop)
                 if (state.gifRawUploadId && !state.uploadId) {
-                    const response = await fetch(`/api/gif/preview/${state.gifRawUploadId}`, { method: 'HEAD' });
+                    // Usar first-frame endpoint (preview não existe para raw uploads)
+                    const response = await fetch(`/api/gif/first-frame/${state.gifRawUploadId}`, { method: 'HEAD' });
                     if (!response.ok) {
                         console.log('GIF raw upload expirado, limpando estado local');
                         sessionStorage.removeItem('mediaUpload');
@@ -883,8 +890,9 @@ function mediaUpload() {
             }
         },
 
-        initCropper() {
-            const image = this.$refs.cropImage;
+        // Inicializa Cropper.js em qualquer ref de imagem
+        initCropperFor(refName) {
+            const image = this.$refs[refName];
             if (!image || this.cropper) return;
 
             this.cropper = new Cropper(image, {
@@ -893,6 +901,10 @@ function mediaUpload() {
                 autoCropArea: 0.8,
                 responsive: true
             });
+        },
+
+        initCropper() {
+            this.initCropperFor('cropImage');
         },
 
         async applyCrop() {
@@ -950,15 +962,7 @@ function mediaUpload() {
         },
 
         initGifCropper() {
-            const image = this.$refs.gifCropImage;
-            if (!image || this.cropper) return;
-
-            this.cropper = new Cropper(image, {
-                aspectRatio: 1,
-                viewMode: 1,
-                autoCropArea: 0.8,
-                responsive: true
-            });
+            this.initCropperFor('gifCropImage');
         },
 
         async applyGifCrop() {
@@ -1057,17 +1061,7 @@ function mediaUpload() {
             this.videoFrameUrl = canvas.toDataURL('image/png');
 
             // Inicializar cropper após render
-            this.$nextTick(() => {
-                const image = this.$refs.videoCropImage;
-                if (!image || this.cropper) return;
-
-                this.cropper = new Cropper(image, {
-                    aspectRatio: 1,
-                    viewMode: 1,
-                    autoCropArea: 0.8,
-                    responsive: true
-                });
-            });
+            this.$nextTick(() => this.initCropperFor('videoCropImage'));
         },
 
         applyVideoCrop() {

@@ -4,6 +4,7 @@ Servico de conversao de video para GIF.
 Usa MoviePy para extrair trechos de video e converter para GIF 64x64.
 """
 
+import gc
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -255,6 +256,9 @@ def convert_video_to_gif(
 
                 # Liberar referência ao frame original
                 del frame, frame_array
+
+        # Liberar recursos do MoviePy (evita memory leak)
+        gc.collect()
 
         if not processed_frames:
             raise ConversionError("Nenhum frame extraido do video")
