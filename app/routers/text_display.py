@@ -22,11 +22,12 @@ class TextRequest(BaseModel):
     """Request para enviar texto ao Pixoo."""
     text: str = Field(..., min_length=1, max_length=500)
     color: str = Field(default="#FFFFFF")
+    background_color: str = Field(default="#000000")
     speed: int = Field(default=150, ge=150, le=200)
     font: int = Field(default=0, ge=0, le=7)
     y: int = Field(default=28, ge=0, le=56)
 
-    @field_validator("color")
+    @field_validator("color", "background_color")
     @classmethod
     def validate_color(cls, v: str) -> str:
         """Valida formato de cor hex."""
@@ -67,7 +68,8 @@ async def send_text(request: TextRequest):
             color=request.color,
             speed=request.speed,
             font=request.font,
-            y=request.y
+            y=request.y,
+            background_color=request.background_color
         )
 
         return TextResponse(

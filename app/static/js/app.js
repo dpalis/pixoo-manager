@@ -1857,8 +1857,10 @@ function textDisplay() {
     return {
         text: '',
         color: '#FFFFFF',
+        backgroundColor: '#000000',
         speed: 150,
         font: 0,
+        fontStyle: 0,
         y: 28,
         sending: false,
         message: '',
@@ -1893,8 +1895,8 @@ function textDisplay() {
             if (!this.ctx) return;
             const ctx = this.ctx;
 
-            // Clear canvas with black background (simulating LED display)
-            ctx.fillStyle = '#000';
+            // Clear canvas with background color (simulating LED display)
+            ctx.fillStyle = this.backgroundColor;
             ctx.fillRect(0, 0, 320, 320);
 
             // Draw grid (64x64 pixels scaled 5x)
@@ -1915,16 +1917,30 @@ function textDisplay() {
             if (this.text) {
                 ctx.fillStyle = this.color;
 
-                // Font size based on font selection (approximate)
+                // Font size based on size selection
                 let fontSize;
                 switch (parseInt(this.font)) {
-                    case 2: fontSize = 32; break;  // Compact
-                    case 4: fontSize = 48; break;  // Wide
-                    case 8: fontSize = 24; break;  // Small
-                    default: fontSize = 40; break; // Default
+                    case 7: fontSize = 28; break;  // Pequeno
+                    case 4: fontSize = 48; break;  // Grande
+                    default: fontSize = 40; break; // Medio (0)
                 }
 
-                ctx.font = `${fontSize}px monospace`;
+                // Font weight/style based on style selection
+                let fontWeight = 'normal';
+                let fontFamily = 'monospace';
+                switch (parseInt(this.fontStyle)) {
+                    case 2:  // Compacto
+                        fontFamily = 'Arial Narrow, sans-serif';
+                        break;
+                    case 5:  // Retro/Pixel
+                        fontFamily = 'Courier New, monospace';
+                        break;
+                    case 8:  // Fino
+                        fontWeight = '300';
+                        break;
+                }
+
+                ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
                 ctx.textBaseline = 'top';
                 ctx.fillText(this.text, this.scrollX, parseInt(this.y) * 5);
 
@@ -1956,8 +1972,9 @@ function textDisplay() {
                     body: JSON.stringify({
                         text: this.text,
                         color: this.color,
+                        background_color: this.backgroundColor,
                         speed: parseInt(this.speed),
-                        font: parseInt(this.font),
+                        font: parseInt(this.fontStyle),  // Usa fontStyle como ID de fonte
                         y: parseInt(this.y)
                     })
                 });
