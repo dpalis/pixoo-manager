@@ -191,3 +191,37 @@ def reset_pixoo_singleton():
     """Reseta o singleton do PixooConnection entre testes."""
     yield
     PixooConnection._instance = None
+
+
+# ============================================
+# Reset dos upload managers entre testes
+# ============================================
+@pytest.fixture(autouse=True)
+def reset_upload_managers():
+    """Limpa uploads em memória entre testes."""
+    from app.services.upload_manager import gif_uploads, media_uploads
+
+    yield
+
+    # Limpar todos os uploads após cada teste
+    gif_uploads.clear()
+    media_uploads.clear()
+
+
+# ============================================
+# Reset do rate limiter entre testes
+# ============================================
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    """Reseta rate limiters entre testes."""
+    from app.middleware import upload_limiter, convert_limiter
+
+    # Limpar antes do teste
+    upload_limiter.requests.clear()
+    convert_limiter.requests.clear()
+
+    yield
+
+    # Limpar após o teste
+    upload_limiter.requests.clear()
+    convert_limiter.requests.clear()

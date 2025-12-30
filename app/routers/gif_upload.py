@@ -8,6 +8,7 @@ Endpoints:
 """
 
 import asyncio
+import io
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -21,7 +22,6 @@ from app.services.file_utils import stream_upload_to_temp, cleanup_files
 from app.services.gif_converter import (
     convert_gif,
     convert_image,
-    get_first_frame,
     get_frame_by_index,
     is_pixoo_ready,
     trim_gif,
@@ -411,44 +411,12 @@ async def upload_gif_raw(file: UploadFile = File(...)):
             frames=metadata.frames,
             duration_ms=metadata.duration_ms,
             file_size=metadata.file_size,
-            first_frame_url=f"/api/gif/first-frame/{upload_id}"
+            first_frame_url=f"/api/gif/frame/{upload_id}/0"
         )
 
     except Exception as e:
         cleanup_files([temp_path])
         raise HTTPException(status_code=500, detail=f"Erro ao processar GIF: {e}")
-
-
-@router.get("/first-frame/{upload_id}")
-async def get_first_frame_endpoint(upload_id: str):
-    """
-    Retorna o primeiro frame do GIF como imagem PNG.
-
-    Usado pelo cropper para mostrar a área de seleção.
-    """
-    _, path = get_upload_or_404(gif_uploads, upload_id)
-
-    try:
-        import io
-
-        # Extrair primeiro frame
-        first_frame = await asyncio.to_thread(get_first_frame, path)
-
-        # Converter para PNG
-        buffer = io.BytesIO()
-        first_frame.convert('RGB').save(buffer, format='PNG')
-        buffer.seek(0)
-
-        return StreamingResponse(
-            buffer,
-            media_type="image/png",
-            headers={
-                "Content-Disposition": f"inline; filename=first_frame_{upload_id}.png",
-                "Cache-Control": "public, max-age=3600"
-            }
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao extrair frame: {e}")
 
 
 @router.get("/frame/{upload_id}/{frame_num}")
@@ -465,8 +433,6 @@ async def get_frame_endpoint(upload_id: str, frame_num: int):
     _, path = get_upload_or_404(gif_uploads, upload_id)
 
     try:
-        import io
-
         # Extrair frame específico
         frame = await asyncio.to_thread(get_frame_by_index, path, frame_num)
 

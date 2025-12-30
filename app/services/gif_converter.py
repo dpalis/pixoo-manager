@@ -128,20 +128,6 @@ def load_gif_frames(path: Path) -> Tuple[List[Image.Image], List[int]]:
     return frames, durations
 
 
-def get_first_frame(path: Path) -> Image.Image:
-    """
-    Extrai o primeiro frame de um GIF.
-
-    Args:
-        path: Caminho do arquivo GIF
-
-    Returns:
-        Primeiro frame como imagem PIL (RGBA)
-    """
-    with Image.open(path) as img:
-        return img.convert('RGBA').copy()
-
-
 def get_frame_by_index(path: Path, frame_index: int) -> Image.Image:
     """
     Extrai um frame específico de um GIF pelo índice.

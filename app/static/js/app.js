@@ -708,8 +708,8 @@ function mediaUpload() {
 
                 // Validar gifRawUploadId (GIF antes do crop)
                 if (state.gifRawUploadId && !state.uploadId) {
-                    // Usar first-frame endpoint (preview não existe para raw uploads)
-                    const response = await fetch(`/api/gif/first-frame/${state.gifRawUploadId}`, { method: 'HEAD' });
+                    // Usar frame/0 endpoint (preview não existe para raw uploads)
+                    const response = await fetch(`/api/gif/frame/${state.gifRawUploadId}/0`, { method: 'HEAD' });
                     if (!response.ok) {
                         console.log('GIF raw upload expirado, limpando estado local');
                         sessionStorage.removeItem('mediaUpload');
