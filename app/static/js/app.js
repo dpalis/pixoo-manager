@@ -1858,7 +1858,7 @@ function textDisplay() {
         text: '',
         color: '#FFFFFF',
         backgroundColor: '#000000',
-        speed: 150,
+        speed: 50,
         fontStyle: 0,
         y: 28,
         sending: false,
