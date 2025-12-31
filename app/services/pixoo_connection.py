@@ -309,6 +309,9 @@ class PixooConnection:
         # Só marca como desconectado se foi erro de conexão (não timeout)
         if is_connection_error:
             with self._state_lock:
+                if self._session:
+                    self._session.close()
+                    self._session = None
                 self._connected = False
         raise PixooConnectionError(f"{last_error} (após {max_retries} tentativas)")
 
