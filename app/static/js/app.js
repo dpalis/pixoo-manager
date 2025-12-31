@@ -899,7 +899,9 @@ function mediaUpload() {
                 aspectRatio: 1,
                 viewMode: 1,
                 autoCropArea: 0.8,
-                responsive: true
+                responsive: true,
+                minContainerWidth: 300,
+                minContainerHeight: 300
             });
         },
 
