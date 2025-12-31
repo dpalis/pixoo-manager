@@ -23,7 +23,7 @@ class TextRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
     color: str = Field(default="#FFFFFF")
     background_color: str = Field(default="#000000")
-    speed: int = Field(default=150, ge=150, le=200)
+    speed: int = Field(default=50, ge=10, le=100)
     font: int = Field(default=0, ge=0, le=7)
     y: int = Field(default=28, ge=0, le=56)
 

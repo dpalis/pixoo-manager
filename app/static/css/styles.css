@@ -376,6 +376,9 @@ button.secondary:hover {
 .crop-source {
     display: block;
     max-width: 100%;
+    min-width: 300px;
+    min-height: 300px;
+    object-fit: contain;
 }
 
 .crop-actions {
