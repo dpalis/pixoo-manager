@@ -70,6 +70,8 @@ class PixooConnection:
         self._connected: bool = False
         # Lock para proteger estado de conexão
         self._state_lock = threading.RLock()
+        # Sessão HTTP persistente para reutilizar conexões (keep-alive)
+        self._session: Optional[requests.Session] = None
 
     @property
     def is_connected(self) -> bool:
@@ -195,21 +197,30 @@ class PixooConnection:
             PixooConnectionError: Se falhar ao conectar
         """
         try:
+            # Criar sessão HTTP persistente (keep-alive)
+            session = requests.Session()
+
             # Testar conexão com comando simples
-            response = requests.post(
+            response = session.post(
                 f"http://{ip}:80/post",
                 json={"Command": "Channel/GetIndex"},
-                timeout=5
+                timeout=10
             )
 
             if response.status_code == 200:
                 data = response.json()
                 if data.get("error_code") == 0:
                     with self._state_lock:
+                        # Fechar sessão anterior se existir
+                        if self._session:
+                            self._session.close()
+                        self._session = session
                         self._ip = ip
                         self._connected = True
+                    logger.info(f"Conectado ao Pixoo em {ip} (sessão persistente)")
                     return True
 
+            session.close()
             raise PixooConnectionError(f"Pixoo em {ip} não respondeu corretamente")
 
         except requests.exceptions.Timeout:
@@ -224,50 +235,82 @@ class PixooConnection:
     def disconnect(self) -> None:
         """Desconecta do Pixoo (thread-safe)."""
         with self._state_lock:
+            if self._session:
+                self._session.close()
+                self._session = None
             self._ip = None
             self._connected = False
 
-    def send_command(self, command: dict) -> dict:
+    def send_command(
+        self,
+        command: dict,
+        max_retries: int = 3,
+        timeout: int = 120
+    ) -> dict:
         """
-        Envia comando para o Pixoo conectado (thread-safe).
+        Envia comando para o Pixoo conectado (thread-safe) com retry automático.
 
         Args:
             command: Dicionário com o comando (ex: {"Command": "Channel/GetIndex"})
+            max_retries: Número máximo de tentativas (default: 3)
+            timeout: Timeout em segundos por tentativa (default: 120)
 
         Returns:
             Resposta do Pixoo como dicionário
 
         Raises:
-            PixooConnectionError: Se não estiver conectado ou comando falhar
+            PixooConnectionError: Se não estiver conectado ou comando falhar após retries
         """
+        import time
+
         with self._state_lock:
-            if not self._connected or not self._ip:
+            if not self._connected or not self._ip or not self._session:
                 raise PixooConnectionError("Não conectado ao Pixoo")
             ip = self._ip  # Cópia local para uso fora do lock
+            session = self._session  # Sessão persistente
 
-        try:
-            response = requests.post(
-                f"http://{ip}:80/post",
-                json=command,
-                timeout=10
-            )
+        last_error = None
+        is_connection_error = False
+        for attempt in range(max_retries):
+            try:
+                response = session.post(
+                    f"http://{ip}:80/post",
+                    json=command,
+                    timeout=timeout
+                )
 
-            if response.status_code == 200:
-                return response.json()
+                if response.status_code == 200:
+                    return response.json()
 
-            raise PixooConnectionError(f"Comando falhou: HTTP {response.status_code}")
+                raise PixooConnectionError(f"Comando falhou: HTTP {response.status_code}")
 
-        except requests.exceptions.Timeout:
-            raise PixooConnectionError("Timeout ao enviar comando")
-        except requests.exceptions.ConnectionError:
-            # Conexão perdida
+            except requests.exceptions.Timeout:
+                last_error = "Timeout ao enviar comando"
+                is_connection_error = False
+                logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou: timeout")
+            except requests.exceptions.ConnectionError:
+                last_error = "Conexão perdida com o Pixoo"
+                is_connection_error = True
+                logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou: conexão")
+            except PixooConnectionError:
+                raise
+            except Exception as e:
+                last_error = f"Erro ao enviar comando: {e}"
+                is_connection_error = False
+                logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou: {e}")
+
+            # Aguardar antes de tentar novamente (backoff exponencial)
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # 1s, 2s, 4s
+                logger.info(f"Aguardando {wait_time}s antes de retry...")
+                time.sleep(wait_time)
+
+        # Todas as tentativas falharam
+        # Só marca como desconectado se foi erro de conexão (não timeout)
+        if is_connection_error:
             with self._state_lock:
                 self._connected = False
-            raise PixooConnectionError("Conexão perdida com o Pixoo")
-        except PixooConnectionError:
-            raise
-        except Exception as e:
-            raise PixooConnectionError(f"Erro ao enviar comando: {e}")
+        raise PixooConnectionError(f"{last_error} (após {max_retries} tentativas)")
 
     def get_status(self) -> dict:
         """
