@@ -428,7 +428,7 @@ function connectionStatus() {
         },
 
         showAbout() {
-            alert('Pixoo Manager v1.0\n\nGerenciador de conteúdo para Divoom Pixoo 64.\n\nEnvie GIFs, fotos, vídeos e texto para seu display LED.');
+            alert('Pixoo Manager v1.3.0\n\nGerenciador de conteúdo para Divoom Pixoo 64.\n\nEnvie GIFs, fotos, vídeos e texto para seu display LED.');
         },
 
         async confirmShutdown() {
