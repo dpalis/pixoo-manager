@@ -327,6 +327,7 @@ function connectionStatus() {
         currentIp: null,
         showManualIp: false,
         manualIp: '',
+        menuOpen: false,
 
         get statusText() {
             if (this.loading) return 'Conectando...';
@@ -423,6 +424,23 @@ function connectionStatus() {
                 console.error('Erro ao desconectar:', e);
             } finally {
                 this.loading = false;
+            }
+        },
+
+        showAbout() {
+            alert('Pixoo Manager v1.3.0\n\nGerenciador de conteúdo para Divoom Pixoo 64.\n\nEnvie GIFs, fotos, vídeos e texto para seu display LED.');
+        },
+
+        async confirmShutdown() {
+            this.menuOpen = false;
+
+            if (confirm('Encerrar o Pixoo Manager?')) {
+                try {
+                    await fetch('/api/system/shutdown', { method: 'POST' });
+                    showServerClosedOverlay();
+                } catch (e) {
+                    console.error('Erro ao encerrar:', e);
+                }
             }
         }
     };
