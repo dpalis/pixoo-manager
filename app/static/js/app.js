@@ -646,6 +646,10 @@ function mediaUpload() {
         videoCropApplying: false,
         videoCropData: null,  // {x, y, width, height}
         videoFrameUrl: null,  // URL do frame extraído para cropper
+        // Save to gallery state
+        saveModalOpen: false,
+        galleryName: '',
+        savingToGallery: false,
 
         async init() {
             await this.restoreState();
@@ -1459,6 +1463,54 @@ function mediaUpload() {
 
         clearMessage() {
             utils.clearMessage(this);
+        },
+
+        // Save to Gallery methods
+        showSaveToGalleryModal() {
+            // Default name based on file name (without extension)
+            const baseName = this.fileName.replace(/\.[^/.]+$/, '');
+            this.galleryName = baseName || 'Minha imagem';
+            this.saveModalOpen = true;
+
+            // Close on Escape key
+            const closeOnEscape = (e) => {
+                if (e.key === 'Escape' && this.saveModalOpen) {
+                    this.saveModalOpen = false;
+                    window.removeEventListener('keydown', closeOnEscape);
+                }
+            };
+            window.addEventListener('keydown', closeOnEscape);
+        },
+
+        async saveToGallery() {
+            if (!this.uploadId || !this.galleryName.trim() || this.savingToGallery) return;
+
+            this.savingToGallery = true;
+
+            try {
+                const response = await fetch('/api/gallery/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        upload_id: this.uploadId,
+                        name: this.galleryName.trim(),
+                        source_type: this.mediaType || 'image'
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    this.saveModalOpen = false;
+                    this.showMessage(data.warning || 'Salvo na galeria!', data.warning ? 'warning' : 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao salvar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao salvar na galeria:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.savingToGallery = false;
+            }
         }
     };
 }
@@ -1491,6 +1543,10 @@ function youtubeDownload() {
         playerError: false,
         playerTimeout: null,
         playerId: 0,  // Unique ID for each player instance
+        // Save to gallery state
+        saveModalOpen: false,
+        galleryName: '',
+        savingToGallery: false,
 
         async init() {
             await this.restoreState();
@@ -1866,6 +1922,53 @@ function youtubeDownload() {
 
         clearMessage() {
             utils.clearMessage(this);
+        },
+
+        // Save to Gallery methods
+        showSaveToGalleryModal() {
+            // Default name based on video title
+            this.galleryName = this.videoInfo?.title || 'YouTube clip';
+            this.saveModalOpen = true;
+
+            // Close on Escape key
+            const closeOnEscape = (e) => {
+                if (e.key === 'Escape' && this.saveModalOpen) {
+                    this.saveModalOpen = false;
+                    window.removeEventListener('keydown', closeOnEscape);
+                }
+            };
+            window.addEventListener('keydown', closeOnEscape);
+        },
+
+        async saveToGallery() {
+            if (!this.downloadId || !this.galleryName.trim() || this.savingToGallery) return;
+
+            this.savingToGallery = true;
+
+            try {
+                const response = await fetch('/api/gallery/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        upload_id: this.downloadId,
+                        name: this.galleryName.trim(),
+                        source_type: 'youtube'
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    this.saveModalOpen = false;
+                    this.showMessage(data.warning || 'Salvo na galeria!', data.warning ? 'warning' : 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao salvar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao salvar na galeria:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.savingToGallery = false;
+            }
         }
     };
 }
@@ -2047,6 +2150,314 @@ function textDisplay() {
         }
     };
 }
+
+
+// ============================================
+// Gallery View Component
+// ============================================
+
+function galleryView() {
+    return {
+        // State
+        items: [],
+        loading: false,
+        sending: false,
+        selectedItem: null,
+        searchQuery: '',
+        showFavoritesOnly: false,
+        modalOpen: false,
+        deleteConfirmId: null,
+        message: '',
+        messageType: '',
+
+        // Stats
+        stats: null,
+
+        // Pagination
+        page: 1,
+        perPage: 50,
+        total: 0,
+        hasMore: false,
+
+        // Debounce timer
+        searchDebounceTimer: null,
+
+        // Getters
+        get filteredItems() {
+            // Filtering is done server-side, this just returns items
+            return this.items;
+        },
+
+        get canSend() {
+            return this.selectedItem && !this.sending;
+        },
+
+        get isEmpty() {
+            return !this.loading && this.items.length === 0 && !this.searchQuery && !this.showFavoritesOnly;
+        },
+
+        get noResults() {
+            return !this.loading && this.items.length === 0 && (this.searchQuery || this.showFavoritesOnly);
+        },
+
+        // Lifecycle
+        async init() {
+            await this.loadGallery();
+            await this.loadStats();
+        },
+
+        // Methods
+        async loadGallery() {
+            this.loading = true;
+            this.clearMessage();
+
+            try {
+                const params = new URLSearchParams({
+                    page: this.page.toString(),
+                    per_page: this.perPage.toString(),
+                });
+
+                if (this.showFavoritesOnly) {
+                    params.append('favorites_only', 'true');
+                }
+                if (this.searchQuery.trim()) {
+                    params.append('search', this.searchQuery.trim());
+                }
+
+                const response = await fetch(`/api/gallery/list?${params}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    this.items = data.items;
+                    this.total = data.total;
+                    this.hasMore = data.has_more;
+                } else {
+                    this.showMessage(data.detail || 'Erro ao carregar galeria', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao carregar galeria:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadStats() {
+            try {
+                const response = await fetch('/api/gallery/stats');
+                if (response.ok) {
+                    this.stats = await response.json();
+                }
+            } catch (e) {
+                console.error('Erro ao carregar stats:', e);
+            }
+        },
+
+        async loadMore() {
+            if (!this.hasMore || this.loading) return;
+
+            this.page++;
+            this.loading = true;
+
+            try {
+                const params = new URLSearchParams({
+                    page: this.page.toString(),
+                    per_page: this.perPage.toString(),
+                });
+
+                if (this.showFavoritesOnly) {
+                    params.append('favorites_only', 'true');
+                }
+                if (this.searchQuery.trim()) {
+                    params.append('search', this.searchQuery.trim());
+                }
+
+                const response = await fetch(`/api/gallery/list?${params}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    this.items = [...this.items, ...data.items];
+                    this.total = data.total;
+                    this.hasMore = data.has_more;
+                }
+            } catch (e) {
+                console.error('Erro ao carregar mais:', e);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // Search with debounce
+        onSearchInput() {
+            clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = setTimeout(() => {
+                this.page = 1;
+                this.loadGallery();
+            }, 300);
+        },
+
+        // Toggle favorites filter
+        toggleFavoritesFilter() {
+            this.showFavoritesOnly = !this.showFavoritesOnly;
+            this.page = 1;
+            this.loadGallery();
+        },
+
+        // Select item for preview
+        selectItem(item) {
+            this.selectedItem = item;
+            this.modalOpen = true;
+        },
+
+        // Close modal
+        closeModal() {
+            this.modalOpen = false;
+            this.selectedItem = null;
+        },
+
+        // Send to Pixoo
+        async sendToPixoo() {
+            if (!this.canSend) return;
+
+            this.sending = true;
+            this.clearMessage();
+
+            try {
+                const response = await fetch(`/api/gallery/${this.selectedItem.id}/send`, {
+                    method: 'POST',
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.showMessage(`Enviado! ${data.frames_sent} frames`, 'success');
+                } else {
+                    this.showMessage(data.detail || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao enviar:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        // Toggle favorite
+        async toggleFavorite(item, event) {
+            event.stopPropagation();
+
+            try {
+                const response = await fetch(`/api/gallery/${item.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_favorite: !item.is_favorite }),
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    // Update item in list
+                    const index = this.items.findIndex(i => i.id === item.id);
+                    if (index !== -1) {
+                        this.items[index] = updated;
+                    }
+                    // Update selected item if it's the same
+                    if (this.selectedItem && this.selectedItem.id === item.id) {
+                        this.selectedItem = updated;
+                    }
+                    // Reload stats
+                    await this.loadStats();
+                }
+            } catch (e) {
+                console.error('Erro ao favoritar:', e);
+            }
+        },
+
+        // Show delete confirmation
+        confirmDelete(item, event) {
+            event.stopPropagation();
+            this.deleteConfirmId = item.id;
+        },
+
+        // Cancel delete
+        cancelDelete() {
+            this.deleteConfirmId = null;
+        },
+
+        // Delete item
+        async deleteItem(item, event) {
+            if (event) event.stopPropagation();
+
+            try {
+                const response = await fetch(`/api/gallery/${item.id}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    // Remove from list
+                    this.items = this.items.filter(i => i.id !== item.id);
+                    this.total--;
+                    this.deleteConfirmId = null;
+
+                    // Close modal if this item was selected
+                    if (this.selectedItem && this.selectedItem.id === item.id) {
+                        this.closeModal();
+                    }
+
+                    // Reload stats
+                    await this.loadStats();
+
+                    this.showMessage('Item removido', 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao remover', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao remover:', e);
+                this.showMessage('Erro de conexão', 'error');
+            }
+        },
+
+        // Format file size
+        formatSize(bytes) {
+            return utils.formatFileSize(bytes);
+        },
+
+        // Format date
+        formatDate(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            });
+        },
+
+        // Message helpers
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+            setTimeout(() => this.clearMessage(), 3000);
+        },
+
+        clearMessage() {
+            this.message = '';
+            this.messageType = '';
+        },
+
+        // Keyboard navigation
+        handleKeydown(event) {
+            if (this.modalOpen) {
+                if (event.key === 'Escape') {
+                    this.closeModal();
+                } else if (event.key === 'Enter' && this.canSend) {
+                    this.sendToPixoo();
+                } else if (event.key === 'Delete' && this.selectedItem) {
+                    this.confirmDelete(this.selectedItem, event);
+                }
+            }
+        }
+    };
+}
+
 
 // Expose utils globally for template use
 window.formatTime = utils.formatTime;

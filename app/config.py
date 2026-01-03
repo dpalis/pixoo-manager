@@ -35,6 +35,12 @@ _DEV_TEMPLATES_DIR = Path(__file__).parent / "templates"
 import tempfile
 TEMP_DIR = Path(tempfile.gettempdir()) / "pixoo_manager"
 
+# Galeria persistente de GIFs
+GALLERY_DIR = Path.home() / ".pixoo_manager" / "gallery"
+GALLERY_MAX_ITEMS = 500
+GALLERY_MAX_SIZE_MB = 500
+GALLERY_WARN_THRESHOLD = 0.9  # Warning em 90%
+
 
 # ============================================
 # Bundled binaries (py2app/PyInstaller support)
