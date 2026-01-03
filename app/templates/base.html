@@ -791,15 +791,6 @@
             <div class="tab-content" x-data="galleryView()" x-init="init()" @keydown.window="handleKeydown($event)">
                 <h2>Galeria de GIFs</h2>
 
-                <!-- Stats Bar -->
-                <div class="gallery-stats" x-show="stats">
-                    <span x-text="`${stats?.item_count || 0} itens`"></span>
-                    <span
-                        :class="{ 'gallery-stats-warning': stats && (stats.item_count / stats.max_items > 0.9 || stats.total_size_bytes / stats.max_size_bytes > 0.9) }"
-                        x-text="`${((stats?.total_size_bytes || 0) / 1024 / 1024).toFixed(1)} MB de ${stats?.max_size_bytes / 1024 / 1024 || 500} MB`"
-                    ></span>
-                </div>
-
                 <!-- Controls -->
                 <div class="gallery-controls">
                     <div class="gallery-search">

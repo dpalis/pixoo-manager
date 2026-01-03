@@ -19,12 +19,7 @@ from uuid import uuid4
 
 from PIL import Image
 
-from app.config import (
-    GALLERY_DIR,
-    GALLERY_MAX_ITEMS,
-    GALLERY_MAX_SIZE_MB,
-    GALLERY_WARN_THRESHOLD,
-)
+from app.config import GALLERY_DIR
 
 
 @dataclass
@@ -258,50 +253,6 @@ class GalleryManager:
                 return new_name
             counter += 1
 
-    def _get_storage_stats(self) -> Tuple[int, int]:
-        """Retorna (quantidade de itens, tamanho total em bytes)."""
-        total_bytes = 0
-        for gif_path in self.gifs_dir.glob("*.gif"):
-            try:
-                total_bytes += gif_path.stat().st_size
-            except OSError:
-                continue
-        return len(self._items), total_bytes
-
-    def _can_save(self, new_file_size: int) -> Tuple[bool, Optional[str]]:
-        """
-        Verifica se pode salvar novo arquivo.
-
-        Returns:
-            (pode_salvar, mensagem_warning_ou_erro)
-        """
-        item_count, total_bytes = self._get_storage_stats()
-        max_bytes = GALLERY_MAX_SIZE_MB * 1024 * 1024
-
-        # Verificar limite de itens
-        if item_count >= GALLERY_MAX_ITEMS:
-            return False, f"Limite de {GALLERY_MAX_ITEMS} itens atingido"
-
-        # Verificar limite de tamanho
-        if total_bytes + new_file_size > max_bytes:
-            return False, f"Limite de {GALLERY_MAX_SIZE_MB} MB atingido"
-
-        # Warning se próximo do limite
-        warn_items = int(GALLERY_MAX_ITEMS * GALLERY_WARN_THRESHOLD)
-        warn_bytes = int(max_bytes * GALLERY_WARN_THRESHOLD)
-
-        warnings = []
-        if item_count >= warn_items:
-            warnings.append(f"{item_count}/{GALLERY_MAX_ITEMS} itens")
-        if total_bytes >= warn_bytes:
-            used_mb = total_bytes / (1024 * 1024)
-            warnings.append(f"{used_mb:.1f}/{GALLERY_MAX_SIZE_MB} MB")
-
-        if warnings:
-            return True, f"Atenção: galeria quase cheia ({', '.join(warnings)})"
-
-        return True, None
-
     def save_gif(
         self,
         source_path: Path,
@@ -322,7 +273,6 @@ class GalleryManager:
             (GalleryItem criado, warning message ou None)
 
         Raises:
-            ValueError: Se limite atingido
             FileNotFoundError: Se arquivo fonte não existe
         """
         if not source_path.exists():
@@ -331,13 +281,6 @@ class GalleryManager:
         file_size = source_path.stat().st_size
 
         with self._lock:
-            # Verificar limites
-            can_save, message = self._can_save(file_size)
-            if not can_save:
-                raise ValueError(message)
-
-            warning = message  # Pode ser warning ou None
-
             # Gerar ID único
             item_id = uuid4().hex[:8]
 
@@ -374,7 +317,7 @@ class GalleryManager:
             self._items[item_id] = item
             self._save_metadata()
 
-            return item, warning
+            return item, None
 
     def list_items(
         self,
@@ -504,12 +447,8 @@ class GalleryManager:
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas da galeria."""
         with self._lock:
-            item_count, total_bytes = self._get_storage_stats()
             return {
-                "item_count": item_count,
-                "max_items": GALLERY_MAX_ITEMS,
-                "total_size_bytes": total_bytes,
-                "max_size_bytes": GALLERY_MAX_SIZE_MB * 1024 * 1024,
+                "item_count": len(self._items),
                 "favorites_count": sum(1 for i in self._items.values() if i.is_favorite),
             }
 

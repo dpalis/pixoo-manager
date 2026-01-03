@@ -117,9 +117,6 @@ class StatsResponse(BaseModel):
     """Estatísticas da galeria."""
 
     item_count: int
-    max_items: int
-    total_size_bytes: int
-    max_size_bytes: int
     favorites_count: int
 
 
