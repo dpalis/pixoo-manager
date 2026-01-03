@@ -31,6 +31,35 @@
                         x-text="connected ? 'Desconectar' : 'Conectar'"
                     ></button>
                 </div>
+
+                <!-- Menu dropdown -->
+                <div class="app-menu" @click.away="menuOpen = false">
+                    <button class="menu-btn" @click="menuOpen = !menuOpen" title="Menu">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <circle cx="12" cy="5" r="2"/>
+                            <circle cx="12" cy="12" r="2"/>
+                            <circle cx="12" cy="19" r="2"/>
+                        </svg>
+                    </button>
+                    <div class="menu-dropdown" x-show="menuOpen" x-cloak x-transition>
+                        <button class="menu-item" @click="showAbout(); menuOpen = false">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="16" x2="12" y2="12"/>
+                                <line x1="12" y1="8" x2="12.01" y2="8"/>
+                            </svg>
+                            Sobre
+                        </button>
+                        <hr class="menu-divider">
+                        <button class="menu-item menu-item-danger" @click="confirmShutdown()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                                <line x1="12" y1="2" x2="12" y2="12"/>
+                            </svg>
+                            Encerrar
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Campo de IP manual (mostrado se nao encontrar automaticamente) -->
