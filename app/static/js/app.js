@@ -2682,6 +2682,7 @@ function uninstallModal() {
     return {
         show: false,
         state: 'confirm', // 'confirm', 'loading', 'success', 'error'
+        confirmText: '',
         errorMessage: '',
         failedFiles: [],
 
@@ -2692,6 +2693,7 @@ function uninstallModal() {
         open() {
             this.show = true;
             this.state = 'confirm';
+            this.confirmText = '';
             this.errorMessage = '';
             this.failedFiles = [];
         },

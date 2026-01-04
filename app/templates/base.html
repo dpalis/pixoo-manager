@@ -1162,10 +1162,26 @@
                             <p>Isso vai deletar todos os GIFs salvos na galeria e outros dados em <code>~/.pixoo_manager/</code></p>
                             <p><strong>Esta ação não pode ser desfeita.</strong></p>
                         </div>
+                        <div class="confirm-input-group">
+                            <label for="confirm-uninstall">Digite <strong>DESINSTALAR</strong> para confirmar:</label>
+                            <input
+                                type="text"
+                                id="confirm-uninstall"
+                                x-model="confirmText"
+                                @input="confirmText = $event.target.value.toUpperCase()"
+                                placeholder="DESINSTALAR"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                        </div>
                     </div>
                     <div class="modal-actions">
                         <button class="secondary" @click="close()">Cancelar</button>
-                        <button class="danger" @click="doUninstall()">Desinstalar</button>
+                        <button
+                            class="danger"
+                            @click="doUninstall()"
+                            :disabled="confirmText !== 'DESINSTALAR'"
+                        >Desinstalar</button>
                     </div>
                 </div>
             </template>
