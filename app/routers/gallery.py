@@ -127,6 +127,13 @@ class BulkDeleteResponse(BaseModel):
     deleted_count: int
 
 
+class AllIdsResponse(BaseModel):
+    """Response com todos os IDs para seleção em massa."""
+
+    ids: List[str]
+    total: int
+
+
 # ============================================
 # Endpoints
 # ============================================
@@ -159,6 +166,20 @@ async def list_gallery(
         total_count=stats["item_count"],
         favorites_count=stats["favorites_count"],
     )
+
+
+@router.get("/ids", response_model=AllIdsResponse)
+async def get_all_ids(
+    favorites_only: bool = Query(default=False, description="Filtrar apenas favoritos"),
+    search: Optional[str] = Query(default=None, description="Busca por nome"),
+):
+    """
+    Retorna todos os IDs da galeria para seleção em massa.
+
+    Respeita os mesmos filtros da listagem (favoritos, busca).
+    """
+    ids = await asyncio.to_thread(gallery.get_all_ids, favorites_only, search)
+    return AllIdsResponse(ids=ids, total=len(ids))
 
 
 @router.get("/thumbnail/{item_id}")

@@ -528,6 +528,33 @@ class GalleryManager:
 
         return None
 
+    def get_all_ids(
+        self,
+        favorites_only: bool = False,
+        search: Optional[str] = None,
+    ) -> List[str]:
+        """
+        Retorna todos os IDs da galeria (para seleção em massa).
+
+        Args:
+            favorites_only: Filtrar apenas favoritos
+            search: Termo de busca no nome
+
+        Returns:
+            Lista de IDs
+        """
+        with self._lock:
+            items = list(self._items.values())
+
+            # Filtrar
+            if favorites_only:
+                items = [i for i in items if i.is_favorite]
+            if search:
+                search_lower = search.lower()
+                items = [i for i in items if search_lower in i.name.lower()]
+
+            return [i.id for i in items]
+
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas da galeria."""
         with self._lock:

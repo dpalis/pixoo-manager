@@ -2454,8 +2454,27 @@ function galleryView() {
             }
         },
 
-        selectAll() {
-            this.selectedIds = this.items.map(i => i.id);
+        async selectAll() {
+            // Fetch all IDs from API (not just current page)
+            const params = new URLSearchParams();
+            if (this.showFavoritesOnly) {
+                params.append('favorites_only', 'true');
+            }
+            if (this.searchQuery.trim()) {
+                params.append('search', this.searchQuery.trim());
+            }
+
+            try {
+                const response = await fetch(`/api/gallery/ids?${params}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.selectedIds = data.ids;
+                }
+            } catch (error) {
+                console.error('Error fetching all IDs:', error);
+                // Fallback: select only current page
+                this.selectedIds = this.items.map(i => i.id);
+            }
         },
 
         clearSelection() {
