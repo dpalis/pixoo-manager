@@ -62,8 +62,6 @@ class GalleryManager:
         └── metadata.json.bak # Backup automático
     """
 
-    METADATA_VERSION = "1.0"
-
     def __init__(self, gallery_dir: Path = GALLERY_DIR):
         """
         Args:
@@ -102,18 +100,12 @@ class GalleryManager:
             with open(self.metadata_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Validar versão
-            version = data.get("version", "1.0")
-            if version != self.METADATA_VERSION:
-                # Migração futura pode ser necessária
-                pass
-
             items_data = data.get("items", {})
             self._items = {
                 item_id: GalleryItem.from_dict(item_data)
                 for item_id, item_data in items_data.items()
             }
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
+        except (json.JSONDecodeError, KeyError, TypeError):
             # Arquivo corrompido, tenta backup
             if self._recover_from_backup():
                 return
@@ -123,7 +115,6 @@ class GalleryManager:
     def _save_metadata(self) -> None:
         """Salva metadados atomicamente com backup."""
         data = {
-            "version": self.METADATA_VERSION,
             "items": {item_id: item.to_dict() for item_id, item in self._items.items()},
         }
         self._atomic_json_write(self.metadata_path, data)
@@ -280,6 +271,11 @@ class GalleryManager:
 
         file_size = source_path.stat().st_size
 
+        # Detectar frame count fora do lock (I/O)
+        if frame_count is None:
+            with Image.open(source_path) as img:
+                frame_count = getattr(img, "n_frames", 1)
+
         with self._lock:
             # Gerar ID único
             item_id = uuid4().hex[:8]
@@ -287,11 +283,6 @@ class GalleryManager:
             # Sanitizar e garantir nome único
             safe_name = self._sanitize_name(name)
             unique_name = self._generate_unique_name(safe_name)
-
-            # Detectar frame count se não fornecido
-            if frame_count is None:
-                with Image.open(source_path) as img:
-                    frame_count = getattr(img, "n_frames", 1)
 
             # Preparar caminhos
             gif_filename = f"{item_id}.gif"
@@ -301,9 +292,6 @@ class GalleryManager:
             try:
                 # Copiar GIF
                 shutil.copy2(source_path, gif_path)
-
-                # Gerar thumbnail
-                self._generate_thumbnail(gif_path, thumb_path)
 
                 # Criar item
                 item = GalleryItem(
@@ -319,17 +307,22 @@ class GalleryManager:
 
                 self._items[item_id] = item
                 self._save_metadata()
-
-                return item, None
             except Exception:
                 # Rollback: limpar arquivos criados em caso de falha
                 if gif_path.exists():
                     gif_path.unlink()
-                if thumb_path.exists():
-                    thumb_path.unlink()
                 if item_id in self._items:
                     del self._items[item_id]
                 raise
+
+        # Gerar thumbnail FORA do lock (I/O pesado, não crítico)
+        try:
+            self._generate_thumbnail(gif_path, thumb_path)
+        except Exception:
+            # Thumbnail falhou mas item foi salvo - será regenerado sob demanda
+            pass
+
+        return item, None
 
     def list_items(
         self,
@@ -448,13 +441,26 @@ class GalleryManager:
             return path if path.exists() else None
 
     def get_thumbnail_path(self, item_id: str) -> Optional[Path]:
-        """Retorna caminho do thumbnail."""
+        """Retorna caminho do thumbnail, regenerando se necessário."""
         with self._lock:
             item = self._items.get(item_id)
             if item is None:
                 return None
-            path = self.thumbnails_dir / f"{item_id}.jpg"
-            return path if path.exists() else None
+
+        thumb_path = self.thumbnails_dir / f"{item_id}.jpg"
+        if thumb_path.exists():
+            return thumb_path
+
+        # Regenerar thumbnail se GIF existe mas thumbnail não
+        gif_path = self.gifs_dir / item.filename
+        if gif_path.exists():
+            try:
+                self._generate_thumbnail(gif_path, thumb_path)
+                return thumb_path
+            except Exception:
+                pass
+
+        return None
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas da galeria."""

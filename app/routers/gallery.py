@@ -2,14 +2,13 @@
 Router para galeria persistente de GIFs.
 
 Endpoints:
-- GET /api/gallery/list - Lista itens paginados
+- GET /api/gallery/list - Lista itens paginados (inclui stats)
 - GET /api/gallery/thumbnail/{id} - Retorna thumbnail JPEG
 - GET /api/gallery/{id} - Retorna GIF completo
 - POST /api/gallery/save - Salva GIF do upload atual
 - PATCH /api/gallery/{id} - Atualiza metadados (nome, favorito)
 - DELETE /api/gallery/{id} - Remove item
 - POST /api/gallery/{id}/send - Envia para Pixoo
-- GET /api/gallery/stats - Estatísticas da galeria
 """
 
 import asyncio
@@ -78,6 +77,9 @@ class GalleryListResponse(BaseModel):
     page: int
     per_page: int
     has_more: bool
+    # Stats incluídos para evitar chamada extra
+    total_count: int
+    favorites_count: int
 
 
 class SaveRequest(BaseModel):
@@ -113,13 +115,6 @@ class SendResponse(BaseModel):
     speed_ms: int
 
 
-class StatsResponse(BaseModel):
-    """Estatísticas da galeria."""
-
-    item_count: int
-    favorites_count: int
-
-
 # ============================================
 # Endpoints
 # ============================================
@@ -136,10 +131,12 @@ async def list_gallery(
     Lista itens da galeria com paginação.
 
     Ordenação: favoritos primeiro, depois alfabético por nome.
+    Inclui stats para evitar chamada extra.
     """
     items, total = await asyncio.to_thread(
         gallery.list_items, page, per_page, favorites_only, search
     )
+    stats = await asyncio.to_thread(gallery.get_stats)
 
     return GalleryListResponse(
         items=[GalleryItemResponse.from_item(item) for item in items],
@@ -147,6 +144,8 @@ async def list_gallery(
         page=page,
         per_page=per_page,
         has_more=(page * per_page) < total,
+        total_count=stats["item_count"],
+        favorites_count=stats["favorites_count"],
     )
 
 
@@ -169,13 +168,6 @@ async def get_thumbnail(item_id: str):
             "ETag": f'"{item_id}"',
         },
     )
-
-
-@router.get("/stats", response_model=StatsResponse)
-async def get_stats():
-    """Retorna estatísticas da galeria."""
-    stats = await asyncio.to_thread(gallery.get_stats)
-    return StatsResponse(**stats)
 
 
 @router.get("/{item_id}")
