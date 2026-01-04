@@ -293,31 +293,43 @@ class GalleryManager:
                 with Image.open(source_path) as img:
                     frame_count = getattr(img, "n_frames", 1)
 
-            # Copiar GIF
+            # Preparar caminhos
             gif_filename = f"{item_id}.gif"
             gif_path = self.gifs_dir / gif_filename
-            shutil.copy2(source_path, gif_path)
-
-            # Gerar thumbnail
             thumb_path = self.thumbnails_dir / f"{item_id}.jpg"
-            self._generate_thumbnail(gif_path, thumb_path)
 
-            # Criar item
-            item = GalleryItem(
-                id=item_id,
-                name=unique_name,
-                filename=gif_filename,
-                source_type=source_type,
-                created_at=datetime.now(timezone.utc).isoformat(),
-                file_size_bytes=file_size,
-                frame_count=frame_count,
-                is_favorite=False,
-            )
+            try:
+                # Copiar GIF
+                shutil.copy2(source_path, gif_path)
 
-            self._items[item_id] = item
-            self._save_metadata()
+                # Gerar thumbnail
+                self._generate_thumbnail(gif_path, thumb_path)
 
-            return item, None
+                # Criar item
+                item = GalleryItem(
+                    id=item_id,
+                    name=unique_name,
+                    filename=gif_filename,
+                    source_type=source_type,
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                    file_size_bytes=file_size,
+                    frame_count=frame_count,
+                    is_favorite=False,
+                )
+
+                self._items[item_id] = item
+                self._save_metadata()
+
+                return item, None
+            except Exception:
+                # Rollback: limpar arquivos criados em caso de falha
+                if gif_path.exists():
+                    gif_path.unlink()
+                if thumb_path.exists():
+                    thumb_path.unlink()
+                if item_id in self._items:
+                    del self._items[item_id]
+                raise
 
     def list_items(
         self,
@@ -377,18 +389,18 @@ class GalleryManager:
             if item is None:
                 return False
 
-            # Remover arquivos
             gif_path = self.gifs_dir / item.filename
             thumb_path = self.thumbnails_dir / f"{item_id}.jpg"
 
+            # PRIMEIRO: Atualizar metadata (operação reversível via backup)
+            del self._items[item_id]
+            self._save_metadata()
+
+            # DEPOIS: Deletar arquivos (sem necessidade de rollback)
             if gif_path.exists():
                 gif_path.unlink()
             if thumb_path.exists():
                 thumb_path.unlink()
-
-            # Remover do índice
-            del self._items[item_id]
-            self._save_metadata()
 
             return True
 
