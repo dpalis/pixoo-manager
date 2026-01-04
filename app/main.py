@@ -28,6 +28,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import HOST, MAX_FILE_SIZE, PORT, STATIC_DIR, TEMPLATES_DIR, TEMP_DIR
 from app.routers import connection as connection_router
+from app.routers import gallery as gallery_router
 from app.routers import gif_upload as gif_router
 from app.routers import heartbeat as heartbeat_router
 from app.routers import media_upload as media_router
@@ -157,6 +158,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Registra routers da API
 app.include_router(connection_router.router)
+app.include_router(gallery_router.router)
 app.include_router(gif_router.router)
 app.include_router(heartbeat_router.router)
 app.include_router(media_router.router)
@@ -218,6 +220,17 @@ async def text_page(request: Request):
     return templates.TemplateResponse("base.html", {
         "request": request,
         "active_tab": "text",
+        "max_file_size": MAX_FILE_SIZE,
+        "session_id": SERVER_SESSION_ID,
+    })
+
+
+@app.get("/gallery")
+async def gallery_page(request: Request):
+    """Página da galeria de GIFs salvos."""
+    return templates.TemplateResponse("base.html", {
+        "request": request,
+        "active_tab": "gallery",
         "max_file_size": MAX_FILE_SIZE,
         "session_id": SERVER_SESSION_ID,
     })

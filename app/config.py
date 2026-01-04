@@ -35,6 +35,9 @@ _DEV_TEMPLATES_DIR = Path(__file__).parent / "templates"
 import tempfile
 TEMP_DIR = Path(tempfile.gettempdir()) / "pixoo_manager"
 
+# Galeria persistente de GIFs
+GALLERY_DIR = Path.home() / ".pixoo_manager" / "gallery"
+
 
 # ============================================
 # Bundled binaries (py2app/PyInstaller support)

@@ -94,6 +94,7 @@
                 </svg>
                 YouTube
             </a>
+            {# Tab Texto oculta - feature em desenvolvimento (ver branch no GitHub)
             <a href="/text" class="tab {% if active_tab == 'text' %}active{% endif %}">
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="4 7 4 4 20 4 20 7"></polyline>
@@ -101,6 +102,16 @@
                     <line x1="12" y1="4" x2="12" y2="20"></line>
                 </svg>
                 Texto
+            </a>
+            #}
+            <a href="/gallery" class="tab {% if active_tab == 'gallery' %}active{% endif %}">
+                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                Galeria
             </a>
         </nav>
 
@@ -399,12 +410,59 @@
                     </button>
                     <button
                         x-show="canSend"
+                        @click="showSaveToGalleryModal()"
+                        class="secondary"
+                    >
+                        Salvar na Galeria
+                    </button>
+                    <button
+                        x-show="canSend"
                         @click="sendToPixoo()"
                         :disabled="sending"
                         class="primary"
                     >
                         Enviar para Pixoo
                     </button>
+                </div>
+
+                <!-- Save to Gallery Modal -->
+                <div class="gallery-modal" x-show="saveModalOpen" x-cloak x-transition>
+                    <div class="gallery-modal-backdrop" @click="saveModalOpen = false"></div>
+                    <div class="gallery-modal-content" @click.stop style="max-width: 400px;">
+                        <div class="gallery-modal-header">
+                            <h3>Salvar na Galeria</h3>
+                            <button class="gallery-modal-close" @click="saveModalOpen = false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="gallery-modal-body">
+                            <div class="form-group">
+                                <label for="gallery-name">Nome do GIF</label>
+                                <input
+                                    type="text"
+                                    id="gallery-name"
+                                    x-model="galleryName"
+                                    placeholder="Digite um nome..."
+                                    maxlength="100"
+                                    @keyup.enter="saveToGallery()"
+                                >
+                            </div>
+                            <div class="gallery-modal-actions" style="margin-top: 1rem;">
+                                <button class="secondary" @click="saveModalOpen = false">Cancelar</button>
+                                <button
+                                    class="primary"
+                                    @click="saveToGallery()"
+                                    :disabled="savingToGallery"
+                                >
+                                    <span x-show="!savingToGallery">Salvar</span>
+                                    <span x-show="savingToGallery">Salvando...</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="message" x-show="message" :class="messageType" x-text="message"></div>
@@ -550,12 +608,59 @@
                     </button>
                     <button
                         x-show="downloadId"
+                        @click="showSaveToGalleryModal()"
+                        class="secondary"
+                    >
+                        Salvar na Galeria
+                    </button>
+                    <button
+                        x-show="downloadId"
                         @click="sendToPixoo()"
                         :disabled="sending"
                         class="primary"
                     >
                         Enviar para Pixoo
                     </button>
+                </div>
+
+                <!-- Save to Gallery Modal -->
+                <div class="gallery-modal" x-show="saveModalOpen" x-cloak x-transition>
+                    <div class="gallery-modal-backdrop" @click="saveModalOpen = false"></div>
+                    <div class="gallery-modal-content" @click.stop style="max-width: 400px;">
+                        <div class="gallery-modal-header">
+                            <h3>Salvar na Galeria</h3>
+                            <button class="gallery-modal-close" @click="saveModalOpen = false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="gallery-modal-body">
+                            <div class="form-group">
+                                <label for="gallery-name-yt">Nome do GIF</label>
+                                <input
+                                    type="text"
+                                    id="gallery-name-yt"
+                                    x-model="galleryName"
+                                    placeholder="Digite um nome..."
+                                    maxlength="100"
+                                    @keyup.enter="saveToGallery()"
+                                >
+                            </div>
+                            <div class="gallery-modal-actions" style="margin-top: 1rem;">
+                                <button class="secondary" @click="saveModalOpen = false">Cancelar</button>
+                                <button
+                                    class="primary"
+                                    @click="saveToGallery()"
+                                    :disabled="savingToGallery"
+                                >
+                                    <span x-show="!savingToGallery">Salvar</span>
+                                    <span x-show="savingToGallery">Salvando...</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="message" x-show="message" :class="messageType" x-text="message"></div>
@@ -682,6 +787,179 @@
                 </div>
 
                 <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+            </div>
+            {% elif active_tab == 'gallery' %}
+            <!-- Tab: Galeria de GIFs -->
+            <div class="tab-content" x-data="galleryView()" x-init="init()" @keydown.window="handleKeydown($event)">
+                <h2>Galeria de GIFs</h2>
+
+                <!-- Controls -->
+                <div class="gallery-controls">
+                    <div class="gallery-search">
+                        <div class="search-wrapper">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Buscar por nome..."
+                                x-model="searchQuery"
+                                @input="onSearchInput()"
+                            >
+                        </div>
+                    </div>
+                    <button
+                        class="filter-btn"
+                        :class="{ 'active': showFavoritesOnly }"
+                        @click="toggleFavoritesFilter()"
+                    >
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        Favoritos
+                    </button>
+                </div>
+
+                <!-- Loading -->
+                <div x-show="loading && items.length === 0" class="loading">
+                    <span>Carregando galeria...</span>
+                </div>
+
+                <!-- Empty State -->
+                <div class="gallery-empty" x-show="isEmpty">
+                    <svg class="gallery-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    <h3>Galeria vazia</h3>
+                    <p>Salve GIFs das outras abas para vê-los aqui.</p>
+                </div>
+
+                <!-- No Results -->
+                <div class="gallery-empty" x-show="noResults">
+                    <svg class="gallery-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <h3>Nenhum resultado</h3>
+                    <p>Tente buscar com outros termos.</p>
+                </div>
+
+                <!-- Grid -->
+                <div class="gallery-grid" x-show="items.length > 0">
+                    <template x-for="item in filteredItems" :key="item.id">
+                        <div
+                            class="gallery-item"
+                            tabindex="0"
+                            @click="selectItem(item)"
+                            @keydown.enter="selectItem(item)"
+                        >
+                            <img
+                                :src="item.thumbnail_url"
+                                :alt="item.name"
+                                class="gallery-thumbnail"
+                                loading="lazy"
+                            >
+                            <div class="gallery-item-overlay">
+                                <span class="gallery-item-name" x-text="item.name"></span>
+                            </div>
+                            <div class="gallery-item-actions">
+                                <button
+                                    class="gallery-action-btn favorite-btn"
+                                    :class="{ 'active': item.is_favorite }"
+                                    @click="toggleFavorite(item, $event)"
+                                    :title="item.is_favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                    </svg>
+                                </button>
+                                <button
+                                    class="gallery-action-btn delete-btn"
+                                    @click="confirmDelete(item, $event)"
+                                    title="Excluir"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Delete Confirmation -->
+                            <div class="delete-confirm" x-show="deleteConfirmId === item.id" x-cloak>
+                                <span class="delete-confirm-text">Excluir item?</span>
+                                <div class="delete-confirm-actions">
+                                    <button class="delete-confirm-btn delete-confirm-yes" @click="deleteItem(item, $event)">Sim</button>
+                                    <button class="delete-confirm-btn delete-confirm-no" @click="cancelDelete()">Não</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Load More -->
+                <div class="gallery-load-more" x-show="hasMore && !loading">
+                    <button class="load-more-btn" @click="loadMore()">
+                        Carregar mais
+                    </button>
+                </div>
+
+                <!-- Message -->
+                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+
+                <!-- Modal -->
+                <div class="gallery-modal" x-show="modalOpen" x-cloak x-transition>
+                    <div class="gallery-modal-backdrop" @click="closeModal()"></div>
+                    <div class="gallery-modal-content" @click.stop>
+                        <div class="gallery-modal-header">
+                            <h3 x-text="selectedItem?.name"></h3>
+                            <button class="gallery-modal-close" @click="closeModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="gallery-modal-body">
+                            <div class="gallery-preview">
+                                <img :src="selectedItem?.gif_url" :alt="selectedItem?.name">
+                            </div>
+                            <div class="gallery-item-info">
+                                <div class="gallery-info-item">
+                                    <div class="gallery-info-label">Frames</div>
+                                    <div class="gallery-info-value" x-text="selectedItem?.frame_count"></div>
+                                </div>
+                                <div class="gallery-info-item">
+                                    <div class="gallery-info-label">Tamanho</div>
+                                    <div class="gallery-info-value" x-text="formatSize(selectedItem?.file_size_bytes)"></div>
+                                </div>
+                                <div class="gallery-info-item">
+                                    <div class="gallery-info-label">Origem</div>
+                                    <div class="gallery-info-value" x-text="selectedItem?.source_type"></div>
+                                </div>
+                                <div class="gallery-info-item">
+                                    <div class="gallery-info-label">Criado em</div>
+                                    <div class="gallery-info-value" x-text="formatDate(selectedItem?.created_at)"></div>
+                                </div>
+                            </div>
+                            <div class="gallery-modal-actions">
+                                <button class="secondary" @click="closeModal()">Fechar</button>
+                                <button
+                                    class="primary"
+                                    @click="sendToPixoo()"
+                                    :disabled="!canSend"
+                                >
+                                    <span x-show="!sending">Enviar para Pixoo</span>
+                                    <span x-show="sending">Enviando...</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             {% endif %}
         </section>
