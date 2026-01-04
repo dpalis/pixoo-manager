@@ -819,6 +819,42 @@
                         </svg>
                         Favoritos
                     </button>
+                    <button
+                        class="filter-btn"
+                        :class="{ 'active': selectionMode }"
+                        @click="toggleSelectionMode()"
+                        x-show="items.length > 0"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <polyline points="9 11 12 14 22 4"></polyline>
+                        </svg>
+                        <span x-text="selectionMode ? 'Cancelar' : 'Selecionar'"></span>
+                    </button>
+                </div>
+
+                <!-- Selection Bar -->
+                <div class="selection-bar" x-show="selectionMode" x-cloak>
+                    <span class="selection-count" x-text="selectedCount + ' selecionado(s)'"></span>
+                    <div class="selection-actions">
+                        <button class="selection-btn" @click="selectAll()" x-show="!allSelected">
+                            Selecionar Todos
+                        </button>
+                        <button class="selection-btn" @click="clearSelection()" x-show="selectedCount > 0">
+                            Limpar Seleção
+                        </button>
+                        <button
+                            class="selection-btn danger"
+                            @click="confirmBulkDelete()"
+                            :disabled="selectedCount === 0"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            Deletar (<span x-text="selectedCount"></span>)
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Loading -->
@@ -853,10 +889,17 @@
                     <template x-for="item in filteredItems" :key="item.id">
                         <div
                             class="gallery-item"
+                            :class="{ 'selected': isSelected(item.id) }"
                             tabindex="0"
-                            @click="selectItem(item)"
-                            @keydown.enter="selectItem(item)"
+                            @click="selectionMode ? toggleSelection(item, $event) : selectItem(item)"
+                            @keydown.enter="selectionMode ? toggleSelection(item, $event) : selectItem(item)"
                         >
+                            <!-- Selection checkbox -->
+                            <div class="gallery-checkbox" x-show="selectionMode" @click.stop="toggleSelection(item, $event)">
+                                <svg x-show="isSelected(item.id)" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                            </div>
                             <img
                                 :src="item.thumbnail_url"
                                 :alt="item.name"
@@ -959,6 +1002,71 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Bulk Delete Confirmation Modal -->
+                <div class="confirm-modal" x-show="bulkDeleteConfirm" x-cloak x-transition>
+                    <div class="confirm-modal-backdrop" @click="cancelBulkDelete()"></div>
+                    <div class="confirm-modal-content">
+                        <div class="confirm-modal-icon danger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </div>
+                        <h3>Deletar <span x-text="selectedCount"></span> item(s)?</h3>
+                        <p>Esta ação é irreversível. Os GIFs serão permanentemente removidos.</p>
+                        <div class="confirm-modal-actions">
+                            <button class="secondary" @click="cancelBulkDelete()">Cancelar</button>
+                            <button class="danger" @click="deleteSelected()">
+                                <span x-show="!loading">Deletar</span>
+                                <span x-show="loading">Deletando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Clear Gallery Confirmation Modal -->
+                <div class="confirm-modal" x-show="clearGalleryConfirm" x-cloak x-transition>
+                    <div class="confirm-modal-backdrop" @click="cancelClearGallery()"></div>
+                    <div class="confirm-modal-content">
+                        <div class="confirm-modal-icon danger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <h3>Limpar toda a galeria?</h3>
+                        <p>Esta ação é <strong>IRREVERSÍVEL</strong>. Todos os <span x-text="stats?.item_count || 0"></span> GIFs serão permanentemente removidos.</p>
+                        <p class="confirm-hint">Digite <strong>LIMPAR</strong> para confirmar:</p>
+                        <input
+                            type="text"
+                            x-model="clearGalleryInput"
+                            placeholder="Digite LIMPAR"
+                            class="confirm-input"
+                            @keydown.enter="canClearGallery && clearGallery()"
+                        >
+                        <div class="confirm-modal-actions">
+                            <button class="secondary" @click="cancelClearGallery()">Cancelar</button>
+                            <button class="danger" @click="clearGallery()" :disabled="!canClearGallery">
+                                <span x-show="!loading">Limpar Galeria</span>
+                                <span x-show="loading">Limpando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gallery Footer with Clear All button -->
+                <div class="gallery-footer" x-show="stats && stats.item_count > 0 && !selectionMode">
+                    <span class="gallery-footer-stats" x-text="(stats?.item_count || 0) + ' GIFs na galeria'"></span>
+                    <button class="gallery-clear-btn" @click="showClearGalleryModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Limpar Galeria
+                    </button>
                 </div>
             </div>
             {% endif %}

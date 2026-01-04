@@ -2170,6 +2170,13 @@ function galleryView() {
         message: '',
         messageType: '',
 
+        // Selection mode state
+        selectionMode: false,
+        selectedIds: [],
+        bulkDeleteConfirm: false,
+        clearGalleryConfirm: false,
+        clearGalleryInput: '',
+
         // Stats
         stats: null,
 
@@ -2198,6 +2205,14 @@ function galleryView() {
 
         get noResults() {
             return !this.loading && this.items.length === 0 && (this.searchQuery || this.showFavoritesOnly);
+        },
+
+        get selectedCount() {
+            return this.selectedIds.length;
+        },
+
+        get allSelected() {
+            return this.items.length > 0 && this.items.every(i => this.selectedIds.includes(i.id));
         },
 
         // Lifecycle
@@ -2416,6 +2431,126 @@ function galleryView() {
             }
         },
 
+        // Selection mode methods
+        toggleSelectionMode() {
+            this.selectionMode = !this.selectionMode;
+            if (!this.selectionMode) {
+                this.selectedIds = [];
+                this.bulkDeleteConfirm = false;
+            }
+        },
+
+        isSelected(id) {
+            return this.selectedIds.includes(id);
+        },
+
+        toggleSelection(item, event) {
+            if (event) event.stopPropagation();
+            const idx = this.selectedIds.indexOf(item.id);
+            if (idx === -1) {
+                this.selectedIds.push(item.id);
+            } else {
+                this.selectedIds.splice(idx, 1);
+            }
+        },
+
+        selectAll() {
+            this.selectedIds = this.items.map(i => i.id);
+        },
+
+        clearSelection() {
+            this.selectedIds = [];
+        },
+
+        // Bulk delete methods
+        confirmBulkDelete() {
+            if (this.selectedCount === 0) return;
+            this.bulkDeleteConfirm = true;
+        },
+
+        cancelBulkDelete() {
+            this.bulkDeleteConfirm = false;
+        },
+
+        async deleteSelected() {
+            if (this.selectedCount === 0) return;
+
+            this.loading = true;
+            try {
+                const response = await fetch('/api/gallery/delete-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_ids: this.selectedIds }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    // Remove deleted items from list
+                    this.items = this.items.filter(i => !this.selectedIds.includes(i.id));
+                    this.total -= data.deleted_count;
+                    this.selectedIds = [];
+                    this.selectionMode = false;
+                    this.bulkDeleteConfirm = false;
+                    await this.loadStats();
+                    this.showMessage(`${data.deleted_count} itens removidos`, 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao deletar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao deletar:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // Clear gallery methods
+        showClearGalleryModal() {
+            this.clearGalleryConfirm = true;
+            this.clearGalleryInput = '';
+        },
+
+        cancelClearGallery() {
+            this.clearGalleryConfirm = false;
+            this.clearGalleryInput = '';
+        },
+
+        get canClearGallery() {
+            return this.clearGalleryInput.toUpperCase() === 'LIMPAR';
+        },
+
+        async clearGallery() {
+            if (!this.canClearGallery) return;
+
+            this.loading = true;
+            try {
+                const response = await fetch('/api/gallery/all', {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    this.items = [];
+                    this.total = 0;
+                    this.selectionMode = false;
+                    this.selectedIds = [];
+                    this.clearGalleryConfirm = false;
+                    this.clearGalleryInput = '';
+                    await this.loadStats();
+                    this.showMessage(`Galeria limpa (${data.deleted_count} itens)`, 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao limpar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao limpar galeria:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
         // Format file size
         formatSize(bytes) {
             return utils.formatFileSize(bytes);
@@ -2445,10 +2580,22 @@ function galleryView() {
 
         // Keyboard navigation
         handleKeydown(event) {
-            if (this.modalOpen) {
-                if (event.key === 'Escape') {
+            // ESC: Close modals or exit selection mode
+            if (event.key === 'Escape') {
+                if (this.bulkDeleteConfirm) {
+                    this.cancelBulkDelete();
+                } else if (this.clearGalleryConfirm) {
+                    this.cancelClearGallery();
+                } else if (this.modalOpen) {
                     this.closeModal();
-                } else if (event.key === 'Enter' && this.canSend) {
+                } else if (this.selectionMode) {
+                    this.toggleSelectionMode();
+                }
+                return;
+            }
+
+            if (this.modalOpen) {
+                if (event.key === 'Enter' && this.canSend) {
                     this.sendToPixoo();
                 } else if (event.key === 'Delete' && this.selectedItem) {
                     this.confirmDelete(this.selectedItem, event);
