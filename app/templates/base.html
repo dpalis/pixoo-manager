@@ -347,7 +347,7 @@
                         </div>
 
                         <!-- Progresso de conversao -->
-                        <div class="progress-section" x-show="converting">
+                        <div class="progress-section" x-show="converting" x-cloak>
                             <div class="progress-bar">
                                 <div class="progress-fill" :style="`width: ${convertProgress}%`"></div>
                             </div>
@@ -368,7 +368,7 @@
                 </template>
 
                 <!-- Acoes -->
-                <div class="actions" x-show="hasFile">
+                <div class="actions" x-show="hasFile" x-cloak>
                     <button @click="clearFile()" class="secondary">Limpar</button>
                     <button
                         x-show="mediaType === 'gif' && needsTrim"
@@ -465,7 +465,7 @@
                     </div>
                 </div>
 
-                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+                <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
             </div>
 
             {% elif active_tab == 'youtube' %}
@@ -563,7 +563,7 @@
                 </template>
 
                 <!-- Progresso -->
-                <div class="progress-section" x-show="downloading">
+                <div class="progress-section" x-show="downloading" x-cloak>
                     <div class="progress-bar">
                         <div class="progress-fill" :style="`width: ${downloadProgress}%`"></div>
                     </div>
@@ -582,7 +582,7 @@
                 </template>
 
                 <!-- Acoes -->
-                <div class="actions" x-show="videoInfo">
+                <div class="actions" x-show="videoInfo" x-cloak>
                     <button @click="clearVideo()" class="secondary">Limpar</button>
                     <button
                         x-show="!downloadId"
@@ -663,7 +663,7 @@
                     </div>
                 </div>
 
-                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+                <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
             </div>
 
             {% elif active_tab == 'text' %}
@@ -786,7 +786,7 @@
                     </button>
                 </div>
 
-                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+                <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
             </div>
             {% elif active_tab == 'gallery' %}
             <!-- Tab: Galeria de GIFs -->
@@ -909,7 +909,7 @@
                 </div>
 
                 <!-- Message -->
-                <div class="message" x-show="message" :class="messageType" x-text="message"></div>
+                <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
 
                 <!-- Modal -->
                 <div class="gallery-modal" x-show="modalOpen" x-cloak x-transition>
