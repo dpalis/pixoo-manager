@@ -397,6 +397,72 @@ class GalleryManager:
 
             return True
 
+    def delete_items(self, item_ids: List[str]) -> int:
+        """
+        Remove múltiplos itens da galeria.
+
+        Args:
+            item_ids: Lista de IDs a remover
+
+        Returns:
+            Quantidade de itens removidos
+        """
+        with self._lock:
+            deleted = 0
+            files_to_delete: List[Path] = []
+
+            for item_id in item_ids:
+                item = self._items.get(item_id)
+                if item is None:
+                    continue
+
+                # Coletar arquivos para deletar
+                gif_path = self.gifs_dir / item.filename
+                thumb_path = self.thumbnails_dir / f"{item_id}.jpg"
+                files_to_delete.append(gif_path)
+                files_to_delete.append(thumb_path)
+
+                del self._items[item_id]
+                deleted += 1
+
+            if deleted > 0:
+                # PRIMEIRO: Salvar metadata
+                self._save_metadata()
+
+                # DEPOIS: Deletar arquivos
+                for path in files_to_delete:
+                    if path.exists():
+                        path.unlink()
+
+            return deleted
+
+    def delete_all(self) -> int:
+        """
+        Remove TODOS os itens da galeria.
+
+        ⚠️ AÇÃO IRREVERSÍVEL
+
+        Returns:
+            Quantidade de itens removidos
+        """
+        with self._lock:
+            count = len(self._items)
+
+            if count == 0:
+                return 0
+
+            # PRIMEIRO: Limpar metadata
+            self._items.clear()
+            self._save_metadata()
+
+            # DEPOIS: Limpar diretórios
+            for gif in self.gifs_dir.glob("*.gif"):
+                gif.unlink()
+            for thumb in self.thumbnails_dir.glob("*.jpg"):
+                thumb.unlink()
+
+            return count
+
     def update_item(
         self,
         item_id: str,

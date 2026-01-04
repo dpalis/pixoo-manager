@@ -115,6 +115,18 @@ class SendResponse(BaseModel):
     speed_ms: int
 
 
+class BulkDeleteRequest(BaseModel):
+    """Request para deletar múltiplos itens."""
+
+    item_ids: List[str] = Field(..., min_length=1, max_length=500)
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response após deleção em massa."""
+
+    deleted_count: int
+
+
 # ============================================
 # Endpoints
 # ============================================
@@ -287,6 +299,28 @@ async def delete_item(item_id: str):
         raise HTTPException(status_code=404, detail="Item não encontrado")
 
     return {"success": True}
+
+
+@router.post("/delete-batch", response_model=BulkDeleteResponse)
+async def delete_batch(request: BulkDeleteRequest):
+    """
+    Remove múltiplos itens da galeria.
+
+    Aceita até 500 IDs por requisição.
+    """
+    count = await asyncio.to_thread(gallery.delete_items, request.item_ids)
+    return BulkDeleteResponse(deleted_count=count)
+
+
+@router.delete("/all", response_model=BulkDeleteResponse)
+async def delete_all():
+    """
+    Remove TODOS os itens da galeria.
+
+    ⚠️ AÇÃO IRREVERSÍVEL - Use com cuidado!
+    """
+    count = await asyncio.to_thread(gallery.delete_all)
+    return BulkDeleteResponse(deleted_count=count)
 
 
 @router.post("/{item_id}/send", response_model=SendResponse)
