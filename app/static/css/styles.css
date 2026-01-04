@@ -1887,6 +1887,269 @@ button.secondary:hover {
 }
 
 /* ============================================
+   Modal System
+   ============================================ */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    padding: 1rem;
+}
+
+.modal {
+    background: var(--bg-card);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header svg {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.modal-content {
+    padding: 1.5rem;
+}
+
+.modal-content p {
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.modal-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Modal Loading State */
+.modal-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+.modal-loading p {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+/* Spinner Animation */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--pixoo-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Modal Actions */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.1);
+    flex-wrap: nowrap;
+}
+
+.modal-actions button {
+    margin: 0;
+    min-width: 100px;
+    white-space: nowrap;
+}
+
+/* Danger Button */
+button.danger {
+    background: var(--pixoo-red);
+    border-color: var(--pixoo-red);
+    color: white;
+}
+
+button.danger:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+}
+
+/* Warning Box (for uninstall confirmation) */
+.warning-box {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: rgba(249, 115, 22, 0.1);
+    border: 1px solid var(--pixoo-orange);
+    border-radius: 0.5rem;
+}
+
+.warning-box svg {
+    width: 20px;
+    height: 20px;
+    color: var(--pixoo-orange);
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.warning-box p {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Changelog (for update modal) */
+.changelog {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.changelog h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.changelog pre {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+/* Version Badge */
+.version-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid var(--pixoo-green);
+    border-radius: 1rem;
+    color: var(--pixoo-green);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.version-badge.new {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--pixoo-blue);
+    color: var(--pixoo-blue);
+}
+
+/* Uninstall Steps */
+.uninstall-steps {
+    margin: 1rem 0;
+    padding: 0 0 0 1.5rem;
+}
+
+.uninstall-steps li {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.uninstall-steps code {
+    background: var(--bg-dark);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.8125rem;
+}
+
+/* Failed Files List */
+.failed-files {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--pixoo-red);
+    border-radius: 0.5rem;
+}
+
+.failed-files h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+    color: var(--pixoo-red);
+}
+
+.failed-files ul {
+    margin: 0;
+    padding: 0 0 0 1.25rem;
+}
+
+.failed-files li {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+/* Success Icon */
+.success-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.success-icon svg {
+    width: 48px;
+    height: 48px;
+    color: var(--pixoo-green);
+}
+
+/* Error Icon */
+.error-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.error-icon svg {
+    width: 48px;
+    height: 48px;
+    color: var(--pixoo-red);
+}
+
+/* ============================================
    Utilities
    ============================================ */
 [x-cloak] {

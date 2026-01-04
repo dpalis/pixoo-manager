@@ -51,6 +51,21 @@
                                 </svg>
                                 Sobre
                             </button>
+                            <button class="menu-item" @click="checkForUpdates(); menuOpen = false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                                    <path d="M21 3v5h-5"/>
+                                </svg>
+                                Verificar Atualizações
+                            </button>
+                            <hr class="menu-divider">
+                            <button class="menu-item menu-item-danger" @click="confirmUninstall(); menuOpen = false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                </svg>
+                                Desinstalar
+                            </button>
                             <hr class="menu-divider">
                             <button class="menu-item menu-item-danger" @click="confirmShutdown()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1072,6 +1087,127 @@
             {% endif %}
         </section>
     </main>
+
+    <!-- Modal de Atualização -->
+    <div class="modal-overlay" x-data="updateModal()" x-show="show" x-cloak @keydown.escape.window="close()">
+        <div class="modal" @click.away="close()">
+            <!-- Estado: Loading -->
+            <template x-if="state === 'loading'">
+                <div class="modal-content modal-loading">
+                    <div class="spinner"></div>
+                    <p>Verificando atualizações...</p>
+                </div>
+            </template>
+
+            <!-- Estado: Update disponível -->
+            <template x-if="state === 'update_available'">
+                <div class="modal-content">
+                    <h3>Nova versão disponível!</h3>
+                    <div class="update-info">
+                        <p><strong>Versão atual:</strong> <span x-text="currentVersion"></span></p>
+                        <p><strong>Nova versão:</strong> <span x-text="latestVersion"></span></p>
+                    </div>
+                    <template x-if="changelog">
+                        <div class="changelog">
+                            <p class="changelog-title">Novidades:</p>
+                            <pre x-text="changelog"></pre>
+                        </div>
+                    </template>
+                    <div class="modal-actions">
+                        <button class="secondary" @click="close()">Fechar</button>
+                        <button class="primary" @click="openRelease()">Baixar</button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Estado: Sem atualizações -->
+            <template x-if="state === 'up_to_date'">
+                <div class="modal-content">
+                    <h3>Tudo atualizado!</h3>
+                    <p>Você está usando a versão mais recente (<span x-text="currentVersion"></span>).</p>
+                    <div class="modal-actions">
+                        <button class="primary" @click="close()">OK</button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Estado: Erro -->
+            <template x-if="state === 'error'">
+                <div class="modal-content modal-error">
+                    <h3>Erro ao verificar</h3>
+                    <p x-text="errorMessage"></p>
+                    <div class="modal-actions">
+                        <button class="primary" @click="close()">OK</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Modal de Desinstalação -->
+    <div class="modal-overlay" x-data="uninstallModal()" x-show="show" x-cloak @keydown.escape.window="close()">
+        <div class="modal" @click.away="close()">
+            <!-- Estado: Confirmação -->
+            <template x-if="state === 'confirm'">
+                <div class="modal-content">
+                    <h3>Desinstalar Pixoo Manager?</h3>
+                    <div class="warning-box">
+                        <p>Isso vai deletar todos os GIFs salvos na galeria e outros dados em <code>~/.pixoo_manager/</code></p>
+                        <p><strong>Esta ação não pode ser desfeita.</strong></p>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="secondary" @click="close()">Cancelar</button>
+                        <button class="danger" @click="doUninstall()">Desinstalar</button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Estado: Processando -->
+            <template x-if="state === 'loading'">
+                <div class="modal-content modal-loading">
+                    <div class="spinner"></div>
+                    <p>Removendo dados...</p>
+                </div>
+            </template>
+
+            <!-- Estado: Sucesso -->
+            <template x-if="state === 'success'">
+                <div class="modal-content">
+                    <h3>Dados removidos!</h3>
+                    <p>Para completar a desinstalação:</p>
+                    <ol class="uninstall-steps">
+                        <li>Feche este app</li>
+                        <li>Arraste "Pixoo Manager" para a Lixeira</li>
+                        <li>Esvazie a Lixeira</li>
+                    </ol>
+                    <div class="modal-actions">
+                        <button class="primary" @click="close()">OK</button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Estado: Erro -->
+            <template x-if="state === 'error'">
+                <div class="modal-content modal-error">
+                    <h3>Erro ao desinstalar</h3>
+                    <p x-text="errorMessage"></p>
+                    <template x-if="failedFiles.length > 0">
+                        <div class="failed-files">
+                            <p>Arquivos que não puderam ser removidos:</p>
+                            <ul>
+                                <template x-for="file in failedFiles" :key="file">
+                                    <li x-text="file"></li>
+                                </template>
+                            </ul>
+                        </div>
+                    </template>
+                    <div class="modal-actions">
+                        <button class="primary" @click="close()">OK</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
 
     <!-- Cropper.js - Recorte de imagens -->
     <script src="/static/vendor/cropper.min.js"></script>

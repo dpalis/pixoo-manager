@@ -431,6 +431,16 @@ function connectionStatus() {
             alert('Pixoo Manager v1.3.0\n\nGerenciador de conteúdo para Divoom Pixoo 64.\n\nEnvie GIFs, fotos, vídeos e texto para seu display LED.');
         },
 
+        checkForUpdates() {
+            // Dispara evento para o modal de update
+            window.dispatchEvent(new CustomEvent('open-update-modal'));
+        },
+
+        confirmUninstall() {
+            // Dispara evento para o modal de uninstall
+            window.dispatchEvent(new CustomEvent('open-uninstall-modal'));
+        },
+
         async confirmShutdown() {
             this.menuOpen = false;
 
@@ -2151,7 +2161,6 @@ function textDisplay() {
     };
 }
 
-
 // ============================================
 // Gallery View Component
 // ============================================
@@ -2605,6 +2614,114 @@ function galleryView() {
     };
 }
 
+// ============================================
+// Update Modal Component
+// ============================================
+function updateModal() {
+    return {
+        show: false,
+        state: 'loading', // 'loading', 'update_available', 'up_to_date', 'error'
+        currentVersion: '',
+        latestVersion: '',
+        changelog: '',
+        releaseUrl: '',
+        errorMessage: '',
+
+        init() {
+            window.addEventListener('open-update-modal', () => this.open());
+        },
+
+        async open() {
+            this.show = true;
+            this.state = 'loading';
+            await this.checkUpdate();
+        },
+
+        close() {
+            this.show = false;
+        },
+
+        async checkUpdate() {
+            try {
+                const response = await fetch('/api/system/check-update', { method: 'POST' });
+                const data = await response.json();
+
+                this.currentVersion = data.current_version;
+
+                if (data.error) {
+                    this.state = 'error';
+                    this.errorMessage = data.error;
+                } else if (data.update_available) {
+                    this.state = 'update_available';
+                    this.latestVersion = data.latest_version;
+                    this.changelog = data.changelog || '';
+                    this.releaseUrl = data.release_url || '';
+                } else {
+                    this.state = 'up_to_date';
+                }
+            } catch (e) {
+                console.error('Erro ao verificar atualizações:', e);
+                this.state = 'error';
+                this.errorMessage = 'Não foi possível conectar ao servidor.';
+            }
+        },
+
+        openRelease() {
+            if (this.releaseUrl) {
+                window.open(this.releaseUrl, '_blank');
+            }
+            this.close();
+        }
+    };
+}
+
+// ============================================
+// Uninstall Modal Component
+// ============================================
+function uninstallModal() {
+    return {
+        show: false,
+        state: 'confirm', // 'confirm', 'loading', 'success', 'error'
+        errorMessage: '',
+        failedFiles: [],
+
+        init() {
+            window.addEventListener('open-uninstall-modal', () => this.open());
+        },
+
+        open() {
+            this.show = true;
+            this.state = 'confirm';
+            this.errorMessage = '';
+            this.failedFiles = [];
+        },
+
+        close() {
+            this.show = false;
+        },
+
+        async doUninstall() {
+            this.state = 'loading';
+
+            try {
+                const response = await fetch('/api/system/uninstall', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    this.state = 'success';
+                } else {
+                    this.state = 'error';
+                    this.errorMessage = data.error || 'Erro ao remover dados.';
+                    this.failedFiles = data.failed_files || [];
+                }
+            } catch (e) {
+                console.error('Erro ao desinstalar:', e);
+                this.state = 'error';
+                this.errorMessage = 'Não foi possível conectar ao servidor.';
+            }
+        }
+    };
+}
 
 // Expose utils globally for template use
 window.formatTime = utils.formatTime;
