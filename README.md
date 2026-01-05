@@ -40,7 +40,25 @@ Aplicativo desktop para Mac (Apple Silicon) para gerenciar conteudo no display L
 
 1. Baixe o arquivo `.dmg` da [pagina de releases](https://github.com/dpalis/pixoo-manager/releases/latest)
 2. Abra o DMG e arraste o app para Aplicativos
-3. Abra o app (pode precisar aprovar em Ajustes do Sistema > Privacidade e Seguranca)
+3. Na primeira execucao, o macOS pode mostrar um aviso de seguranca (veja abaixo)
+
+#### Aviso de Seguranca do macOS
+
+O app nao esta assinado com um certificado Apple Developer, entao o macOS exibe um aviso na primeira execucao.
+
+**Solucao 1 - Via Ajustes (mais facil):**
+1. Tente abrir o app normalmente
+2. Clique "OK" no aviso (nao mova para o lixo)
+3. Va em **Ajustes do Sistema → Privacidade e Seguranca**
+4. Role ate ver a mensagem sobre "Pixoo foi bloqueado"
+5. Clique em **"Abrir Mesmo Assim"**
+
+**Solucao 2 - Via Terminal (mais rapido):**
+```bash
+xattr -cr /Applications/Pixoo.app
+```
+
+Depois disso, o app abre normalmente sem avisos.
 
 ### Opcao 2: Rodar em desenvolvimento
 
