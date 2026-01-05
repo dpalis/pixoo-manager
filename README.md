@@ -24,11 +24,6 @@ Aplicativo desktop para Mac (Apple Silicon) para gerenciar conteudo no display L
 - Deletar em lote ou limpar tudo
 - Reenviar para o Pixoo a qualquer momento
 
-### Texto
-- Enviar mensagens de texto scrolling
-- Cores personalizadas (texto e fundo)
-- Multiplas fontes disponiveis
-
 ### Conexao
 - Descoberta automatica do Pixoo 64 na rede (scan completo 1-254)
 - Reconexao rapida ao ultimo IP usado
@@ -126,7 +121,6 @@ O instalador sera criado como `Pixoo-{version}.dmg`
 - Galeria de GIFs persistente
 - Crop para GIFs e videos
 - Trim de frames para GIFs grandes
-- Tab de texto scrolling
 - Verificador de atualizacoes
 - Desinstalador completo
 - Bulk delete na galeria
