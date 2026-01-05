@@ -3,19 +3,67 @@ Serviço de conexão com o Pixoo 64.
 
 Implementa descoberta de dispositivos na rede e gerenciamento de conexão.
 Usa padrão Singleton para manter estado de conexão entre requests.
+
+Features:
+- Descoberta via mDNS (_pixoo._tcp.local.)
+- Fallback: scan de rede (1-254)
+- Persistência do último IP conectado para descoberta instantânea
 """
 
+import json
 import logging
 import socket
 import threading
+from pathlib import Path
 from typing import List, Optional
 
 import requests
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
+from app.config import USER_DATA_DIR
 from app.services.exceptions import PixooConnectionError, PixooNotFoundError
 
+# Arquivo para persistir último IP conectado
+LAST_CONNECTION_FILE = USER_DATA_DIR / "last_connection.json"
+
 logger = logging.getLogger(__name__)
+
+
+def _load_last_ip() -> Optional[str]:
+    """Carrega o último IP conectado do arquivo de persistência."""
+    try:
+        if LAST_CONNECTION_FILE.exists():
+            data = json.loads(LAST_CONNECTION_FILE.read_text())
+            return data.get("ip")
+    except Exception as e:
+        logger.debug(f"Erro ao carregar último IP: {e}")
+    return None
+
+
+def _save_last_ip(ip: str) -> None:
+    """Salva o IP conectado para descoberta futura."""
+    try:
+        USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        LAST_CONNECTION_FILE.write_text(json.dumps({"ip": ip}))
+        logger.debug(f"IP salvo para próxima descoberta: {ip}")
+    except Exception as e:
+        logger.warning(f"Erro ao salvar último IP: {e}")
+
+
+def _check_pixoo_ip(ip: str, timeout: float = 0.3) -> bool:
+    """Verifica se um IP é um Pixoo válido."""
+    try:
+        response = requests.post(
+            f"http://{ip}:80/post",
+            json={"Command": "Channel/GetIndex"},
+            timeout=timeout
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("error_code") == 0
+    except Exception:
+        pass
+    return False
 
 
 class PixooServiceListener(ServiceListener):
@@ -87,7 +135,12 @@ class PixooConnection:
 
     def discover(self, timeout: float = 3.0) -> List[str]:
         """
-        Descobre dispositivos Pixoo na rede via mDNS.
+        Descobre dispositivos Pixoo na rede.
+
+        Ordem de prioridade:
+        1. Último IP conectado (instantâneo se ainda válido)
+        2. mDNS (_pixoo._tcp.local.)
+        3. Scan de rede completo (1-254)
 
         Args:
             timeout: Tempo máximo de busca em segundos
@@ -97,6 +150,16 @@ class PixooConnection:
         """
         devices: List[str] = []
 
+        # 1. Tentar último IP conectado (descoberta instantânea)
+        last_ip = _load_last_ip()
+        if last_ip:
+            logger.debug(f"Tentando último IP conhecido: {last_ip}")
+            if _check_pixoo_ip(last_ip, timeout=0.5):
+                logger.info(f"Pixoo encontrado no último IP: {last_ip}")
+                return [last_ip]
+            logger.debug(f"Último IP {last_ip} não responde mais")
+
+        # 2. Tentar mDNS
         try:
             zeroconf = Zeroconf()
             listener = PixooServiceListener()
@@ -115,19 +178,19 @@ class PixooConnection:
             # mDNS pode falhar em algumas redes - log para debugging
             logger.debug(f"mDNS discovery failed (will try network scan): {e}")
 
-        # Se não encontrou via mDNS, tenta scan de rede como fallback
+        # 3. Se não encontrou via mDNS, tenta scan de rede como fallback
         if not devices:
             devices = self._scan_network()
 
         return devices
 
-    def _scan_network(self, timeout: float = 0.5) -> List[str]:
+    def _scan_network(self) -> List[str]:
         """
-        Scan de rede como fallback quando mDNS não funciona.
+        Scan de rede completo como fallback quando mDNS não funciona.
 
-        Tenta conectar na porta 80 dos IPs comuns de rede local.
-        Usa ThreadPoolExecutor com limite de 20 workers para evitar
-        explosão de threads.
+        Escaneia todos os IPs (1-254) da rede local.
+        Usa ThreadPoolExecutor com 50 workers e timeout de 0.3s
+        para scan rápido (~3 segundos total).
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -147,30 +210,18 @@ class PixooConnection:
 
         def check_ip(ip: str) -> Optional[str]:
             """Verifica se um IP é um Pixoo. Retorna o IP se encontrado."""
-            try:
-                response = requests.post(
-                    f"http://{ip}:80/post",
-                    json={"Command": "Channel/GetIndex"},
-                    timeout=timeout
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    # Pixoo retorna error_code 0 em sucesso
-                    if data.get("error_code") == 0:
-                        return ip
-            except Exception:
-                pass
+            if _check_pixoo_ip(ip, timeout=0.3):
+                return ip
             return None
 
-        # Lista de IPs para verificar (1-50 e 100-150)
-        ips_to_check = [
-            f"{network_prefix}.{i}"
-            for i in list(range(1, 51)) + list(range(100, 151))
-        ]
+        # Escaneia TODOS os IPs da rede (1-254)
+        ips_to_check = [f"{network_prefix}.{i}" for i in range(1, 255)]
 
-        # Usa ThreadPoolExecutor com máximo de 20 workers
-        # Isso evita explosão de threads e exaustão de recursos
-        with ThreadPoolExecutor(max_workers=20) as executor:
+        logger.debug(f"Escaneando rede {network_prefix}.1-254 (254 IPs)")
+
+        # Usa ThreadPoolExecutor com 50 workers para scan rápido
+        # 254 IPs / 50 workers = ~5 batches × 0.3s timeout = ~1.5s
+        with ThreadPoolExecutor(max_workers=50) as executor:
             futures = {executor.submit(check_ip, ip): ip for ip in ips_to_check}
 
             for future in as_completed(futures, timeout=30):
@@ -217,6 +268,8 @@ class PixooConnection:
                         self._session = session
                         self._ip = ip
                         self._connected = True
+                    # Salvar IP para próxima descoberta (fora do lock)
+                    _save_last_ip(ip)
                     logger.info(f"Conectado ao Pixoo em {ip} (sessão persistente)")
                     return True
 
