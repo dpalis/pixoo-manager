@@ -6,10 +6,12 @@
 # - Custom dark background with arrow
 # - Proper icon positioning
 # - Applications folder link
+# - Volume icon
 #
 # Prerequisites:
 #   - py2app installed in .venv
 #   - Python 3.10+
+#   - create-dmg (brew install create-dmg)
 #
 # Usage:
 #   ./scripts/build_dmg.sh
@@ -29,12 +31,11 @@ APP_NAME="Pixoo"
 VOLUME_NAME="Pixoo Manager"
 VERSION=$(source .venv/bin/activate && python3 -c "from app.__version__ import __version__; print(__version__)")
 DMG_NAME="${APP_NAME}-${VERSION}"
-DMG_TEMP="${DMG_NAME}-temp.dmg"
 DMG_FINAL="${DMG_NAME}.dmg"
 BUILD_DIR="build"
 DIST_DIR="dist"
-DMG_DIR="dmg_contents"
 BACKGROUND_IMG="resources/dmg/background.png"
+VOLUME_ICON="resources/Pixoo.icns"
 
 # DMG Window settings
 WINDOW_WIDTH=660
@@ -49,10 +50,19 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Building ${APP_NAME} v${VERSION}${NC}"
 echo -e "${GREEN}========================================${NC}"
 
+# Step 0: Check for create-dmg
+echo -e "\n${YELLOW}Step 0: Checking dependencies...${NC}"
+if ! command -v create-dmg &> /dev/null; then
+    echo -e "${RED}Error: create-dmg not found.${NC}"
+    echo "Install with: brew install create-dmg"
+    exit 1
+fi
+echo "create-dmg found."
+
 # Step 1: Clean previous builds
 echo -e "\n${YELLOW}Step 1: Cleaning previous builds...${NC}"
-rm -rf "$BUILD_DIR" "$DIST_DIR" "$DMG_DIR"
-rm -f "${DMG_NAME}.dmg" "${DMG_TEMP}"
+rm -rf "$BUILD_DIR" "$DIST_DIR"
+rm -f "${DMG_FINAL}"
 echo "Done."
 
 # Step 2: Generate DMG background if needed
@@ -77,81 +87,48 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 echo "Found: $APP_PATH"
 
-# Step 5: Create temporary DMG contents
-echo -e "\n${YELLOW}Step 5: Creating DMG contents...${NC}"
-mkdir -p "$DMG_DIR/.background"
-cp -R "$APP_PATH" "$DMG_DIR/"
-ln -s /Applications "$DMG_DIR/Applications"
-cp "$BACKGROUND_IMG" "$DMG_DIR/.background/background.png"
-echo "Done."
+# Step 5: Create DMG with create-dmg
+echo -e "\n${YELLOW}Step 5: Creating styled DMG...${NC}"
 
-# Step 6: Calculate DMG size
-echo -e "\n${YELLOW}Step 6: Calculating DMG size...${NC}"
-SIZE=$(du -sm "$DMG_DIR" | cut -f1)
-SIZE=$((SIZE + 20))  # Add 20MB buffer
-echo "Size: ${SIZE}MB"
+# Remove existing DMG if present
+rm -f "$DMG_FINAL"
 
-# Step 7: Create temporary read-write DMG
-echo -e "\n${YELLOW}Step 7: Creating temporary DMG...${NC}"
-hdiutil create -srcfolder "$DMG_DIR" -volname "$VOLUME_NAME" -fs HFS+ \
-    -fsargs "-c c=64,a=16,e=16" -format UDRW -size ${SIZE}m "$DMG_TEMP"
-echo "Done."
+# Build DMG arguments
+DMG_ARGS=(
+    --volname "$VOLUME_NAME"
+    --background "$BACKGROUND_IMG"
+    --window-pos 200 120
+    --window-size $WINDOW_WIDTH $WINDOW_HEIGHT
+    --icon-size $ICON_SIZE
+    --icon "${APP_NAME}.app" $APP_ICON_X $APP_ICON_Y
+    --hide-extension "${APP_NAME}.app"
+    --app-drop-link $APPS_ICON_X $APPS_ICON_Y
+)
 
-# Step 8: Mount and style the DMG
-echo -e "\n${YELLOW}Step 8: Styling DMG window...${NC}"
-DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_TEMP" | \
-    grep -E '^/dev/' | sed 1q | awk '{print $1}')
-MOUNT_POINT="/Volumes/$VOLUME_NAME"
+# Add volume icon if exists
+if [ -f "$VOLUME_ICON" ]; then
+    DMG_ARGS+=(--volicon "$VOLUME_ICON")
+    echo "Using volume icon: $VOLUME_ICON"
+fi
 
-echo "Mounted at: $MOUNT_POINT"
-sleep 2  # Wait for mount
+# Create the DMG
+# Note: create-dmg returns error code 2 when codesigning fails (expected for unsigned apps)
+# We check if the DMG was created successfully instead
+set +e
+create-dmg "${DMG_ARGS[@]}" "$DMG_FINAL" "$APP_PATH"
+CREATE_DMG_EXIT=$?
+set -e
 
-# Apply Finder view settings via AppleScript
-echo "Applying Finder settings..."
-osascript <<EOF
-tell application "Finder"
-    tell disk "$VOLUME_NAME"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set bounds of container window to {100, 100, $((100 + WINDOW_WIDTH)), $((100 + WINDOW_HEIGHT))}
+if [ ! -f "$DMG_FINAL" ]; then
+    echo -e "${RED}Error: DMG creation failed.${NC}"
+    exit 1
+fi
 
-        set theViewOptions to icon view options of container window
-        set arrangement of theViewOptions to not arranged
-        set icon size of theViewOptions to $ICON_SIZE
-        set background picture of theViewOptions to file ".background:background.png"
+# Exit code 2 = codesigning failed (expected for unsigned apps)
+if [ $CREATE_DMG_EXIT -ne 0 ] && [ $CREATE_DMG_EXIT -ne 2 ]; then
+    echo -e "${YELLOW}Warning: create-dmg returned exit code $CREATE_DMG_EXIT${NC}"
+fi
 
-        set position of item "$APP_NAME.app" of container window to {$APP_ICON_X, $APP_ICON_Y}
-        set position of item "Applications" of container window to {$APPS_ICON_X, $APPS_ICON_Y}
-
-        close
-        open
-
-        update without registering applications
-        delay 2
-    end tell
-end tell
-EOF
-
-# Sync and wait
-sync
-sleep 3
-
-# Unmount
-echo "Unmounting..."
-hdiutil detach "$DEVICE" -quiet
-echo "Done."
-
-# Step 9: Convert to compressed final DMG
-echo -e "\n${YELLOW}Step 9: Creating final DMG...${NC}"
-hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_FINAL"
-rm -f "$DMG_TEMP"
-echo "Done."
-
-# Step 10: Cleanup
-echo -e "\n${YELLOW}Step 10: Cleaning up...${NC}"
-rm -rf "$DMG_DIR"
 echo "Done."
 
 # Summary
