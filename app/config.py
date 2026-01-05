@@ -35,8 +35,18 @@ _DEV_TEMPLATES_DIR = Path(__file__).parent / "templates"
 import tempfile
 TEMP_DIR = Path(tempfile.gettempdir()) / "pixoo_manager"
 
+# Diretório de dados do usuário (~/.pixoo_manager/)
+USER_DATA_DIR = Path.home() / ".pixoo_manager"
+
 # Galeria persistente de GIFs
-GALLERY_DIR = Path.home() / ".pixoo_manager" / "gallery"
+GALLERY_DIR = USER_DATA_DIR / "gallery"
+
+# ============================================
+# GitHub Update Configuration
+# ============================================
+GITHUB_OWNER = "dpalis"
+GITHUB_REPO = "pixoo-manager"
+UPDATE_CHECK_TIMEOUT = 10  # segundos
 
 
 # ============================================
