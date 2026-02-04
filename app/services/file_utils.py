@@ -294,6 +294,37 @@ class FileTracker:
 file_tracker = FileTracker()
 
 
+def atomic_json_write(filepath: Path, data: dict, base_dir: Path = None) -> None:
+    """
+    Escreve JSON atomicamente usando temp + replace.
+
+    Args:
+        filepath: Caminho do arquivo destino
+        data: Dados para serializar como JSON
+        base_dir: Diretorio base para criar se nao existir (opcional)
+    """
+    import json
+    import os
+    import tempfile
+
+    if base_dir:
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+    fd, temp_path = tempfile.mkstemp(
+        dir=filepath.parent, prefix=f".{filepath.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())  # Garante dados no disco antes do replace
+        os.replace(temp_path, filepath)
+    except Exception:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+        raise
+
+
 def cleanup_files(paths: List[Path]) -> None:
     """
     Remove lista de arquivos de forma segura.

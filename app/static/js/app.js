@@ -68,6 +68,75 @@ document.addEventListener('visibilitychange', () => {
 })();
 
 // ============================================
+// Global Rotation State (shared between header and gallery)
+// ============================================
+const rotationState = {
+    active: false,
+    paused: false,
+    ids: [],
+    intervalLabel: '',
+    _refreshPromise: null,
+
+    async refresh() {
+        // Promise caching: prevent duplicate fetches when called multiple times
+        // (e.g., on page load from both script init and galleryView.init)
+        if (this._refreshPromise) {
+            return this._refreshPromise;
+        }
+
+        this._refreshPromise = (async () => {
+            try {
+                const response = await fetch('/api/rotation/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.active = data.is_active;
+                    this.paused = data.is_paused;
+                    this.ids = data.selected_ids;
+                    this.intervalLabel = data.interval_label;
+                }
+            } catch (e) {
+                console.error('Erro ao verificar rotação:', e);
+            } finally {
+                this._refreshPromise = null;
+            }
+        })();
+
+        return this._refreshPromise;
+    }
+};
+
+// Check rotation status on page load
+rotationState.refresh();
+
+// ============================================
+// Global Stop Rotation Modal
+// ============================================
+function stopRotationModal() {
+    return {
+        show: false,
+        callback: null,
+
+        open(callback) {
+            this.callback = callback;
+            this.show = true;
+        },
+
+        confirm() {
+            this.show = false;
+            if (this.callback) {
+                this.callback();
+                this.callback = null;
+            }
+        },
+
+        cancel() {
+            this.show = false;
+            this.callback = null;
+        }
+    };
+}
+
+// ============================================
 // Utility Functions (Shared)
 // ============================================
 const utils = {
@@ -1210,11 +1279,25 @@ function mediaUpload() {
             }
         },
 
-        async sendToPixoo() {
+        async sendToPixoo(skipConfirm = false) {
             if (!this.canSend) return;
+
+            // Verificar se rotação está ativa e pedir confirmação
+            if (rotationState.active && !skipConfirm) {
+                window.dispatchEvent(new CustomEvent('show-stop-rotation-confirm', {
+                    detail: () => this.sendToPixoo(true)
+                }));
+                return;
+            }
 
             this.sending = true;
             try {
+                // Se rotação ativa, parar primeiro
+                if (rotationState.active) {
+                    await fetch('/api/rotation/stop', { method: 'POST' });
+                    await rotationState.refresh();
+                }
+
                 this.showMessage('Enviando para Pixoo...', 'info');
 
                 // GIFs usam endpoint dedicado
@@ -1857,11 +1940,25 @@ function youtubeDownload() {
             }
         },
 
-        async sendToPixoo() {
+        async sendToPixoo(skipConfirm = false) {
             if (!this.downloadId) return;
+
+            // Verificar se rotação está ativa e pedir confirmação
+            if (rotationState.active && !skipConfirm) {
+                window.dispatchEvent(new CustomEvent('show-stop-rotation-confirm', {
+                    detail: () => this.sendToPixoo(true)
+                }));
+                return;
+            }
 
             this.sending = true;
             try {
+                // Se rotação ativa, parar primeiro
+                if (rotationState.active) {
+                    await fetch('/api/rotation/stop', { method: 'POST' });
+                    await rotationState.refresh();
+                }
+
                 this.showMessage('Enviando para Pixoo...', 'info');
 
                 const response = await fetch('/api/youtube/send', {
@@ -2186,6 +2283,15 @@ function galleryView() {
         clearGalleryConfirm: false,
         clearGalleryInput: '',
 
+        // Rotation state (uses global rotationState for active/paused/ids/intervalLabel)
+        rotationInterval: 120,
+        hasSavedConfig: false,
+        rotationModalOpen: false,
+        singleImageModalOpen: false,
+        selectedInterval: 120,
+        rotationIntervals: {},
+        _rotationOperationInProgress: false,
+
         // Stats
         stats: null,
 
@@ -2228,6 +2334,8 @@ function galleryView() {
         async init() {
             await this.loadGallery();
             await this.loadStats();
+            await this.loadRotationIntervals();
+            await this.checkRotationStatus();
         },
 
         // Methods
@@ -2340,13 +2448,27 @@ function galleryView() {
         },
 
         // Send to Pixoo
-        async sendToPixoo() {
+        async sendToPixoo(skipConfirm = false) {
             if (!this.canSend) return;
+
+            // Verificar se rotação está ativa e pedir confirmação
+            if (rotationState.active && !skipConfirm) {
+                window.dispatchEvent(new CustomEvent('show-stop-rotation-confirm', {
+                    detail: () => this.sendToPixoo(true)
+                }));
+                return;
+            }
 
             this.sending = true;
             this.clearMessage();
 
             try {
+                // Se rotação ativa, parar primeiro
+                if (rotationState.active) {
+                    await fetch('/api/rotation/stop', { method: 'POST' });
+                    await this.checkRotationStatus();
+                }
+
                 const response = await fetch(`/api/gallery/${this.selectedItem.id}/send`, {
                     method: 'POST',
                 });
@@ -2606,11 +2728,259 @@ function galleryView() {
             this.messageType = '';
         },
 
+        // ============================================
+        // Rotation Methods
+        // ============================================
+
+        async loadRotationIntervals() {
+            try {
+                const response = await fetch('/api/rotation/intervals');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.rotationIntervals = data.intervals;
+                }
+            } catch (e) {
+                console.error('Erro ao carregar intervalos:', e);
+            }
+        },
+
+        async checkRotationStatus() {
+            try {
+                const response = await fetch('/api/rotation/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Update global state (single source of truth)
+                    rotationState.active = data.is_active;
+                    rotationState.paused = data.is_paused;
+                    rotationState.ids = data.selected_ids;
+                    rotationState.intervalLabel = data.interval_label;
+
+                    // Local-only state
+                    this.rotationInterval = data.interval_seconds;
+                    this.hasSavedConfig = data.has_saved_config;
+                }
+            } catch (e) {
+                console.error('Erro ao verificar status de rotação:', e);
+            }
+        },
+
+        isInRotation(id) {
+            return rotationState.ids.includes(id);
+        },
+
+        openRotationModal() {
+            if (this.selectedCount === 0) return;
+
+            // Caso especial: 1 imagem
+            if (this.selectedCount === 1) {
+                this.singleImageModalOpen = true;
+                return;
+            }
+
+            this.selectedInterval = 120; // Default: 2 minutos
+            this.rotationModalOpen = true;
+        },
+
+        closeRotationModal() {
+            this.rotationModalOpen = false;
+        },
+
+        closeSingleImageModal() {
+            this.singleImageModalOpen = false;
+        },
+
+        async startRotation() {
+            if (this.selectedCount === 0) return;
+            if (this._rotationOperationInProgress) return;
+
+            this._rotationOperationInProgress = true;
+            try {
+                const response = await fetch('/api/rotation/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        selected_ids: this.selectedIds,
+                        interval_seconds: this.selectedInterval,
+                    }),
+                });
+
+                if (response.ok) {
+                    await this.checkRotationStatus();
+                    this.rotationModalOpen = false;
+                    this.selectionMode = false;
+                    this.selectedIds = [];
+                    this.showMessage('Rotação iniciada', 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao iniciar rotação', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao iniciar rotação:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this._rotationOperationInProgress = false;
+            }
+        },
+
+        async stopRotation() {
+            if (this._rotationOperationInProgress) return;
+
+            this._rotationOperationInProgress = true;
+            try {
+                const response = await fetch('/api/rotation/stop', { method: 'POST' });
+                if (response.ok) {
+                    await this.checkRotationStatus();
+                    this.showMessage('Rotação parada', 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao parar rotação', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao parar rotação:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this._rotationOperationInProgress = false;
+            }
+        },
+
+        // Adiciona itens selecionados à rotação ativa (em paralelo)
+        async addToRotation() {
+            // Filtrar apenas itens que não estão na rotação
+            const newIds = this.selectedIds.filter(id => !this.isInRotation(id));
+            if (newIds.length === 0) {
+                this.showMessage('Itens já estão na rotação', 'info');
+                return;
+            }
+            if (this._rotationOperationInProgress) return;
+
+            this._rotationOperationInProgress = true;
+            try {
+                // Adicionar todos em paralelo com Promise.allSettled
+                const results = await Promise.allSettled(
+                    newIds.map(id => fetch(`/api/rotation/add/${id}`, { method: 'POST' }))
+                );
+
+                const added = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+                const failed = results.length - added;
+
+                await this.checkRotationStatus();
+                this.selectionMode = false;
+                this.selectedIds = [];
+
+                if (failed > 0) {
+                    this.showMessage(`${added} adicionado(s), ${failed} falhou(aram)`, 'warning');
+                } else {
+                    this.showMessage(`${added} item(s) adicionado(s) à rotação`, 'success');
+                }
+            } catch (e) {
+                console.error('Erro ao adicionar à rotação:', e);
+                this.showMessage('Erro ao adicionar itens à rotação', 'error');
+            } finally {
+                this._rotationOperationInProgress = false;
+            }
+        },
+
+        // Verifica se algum item selecionado NÃO está na rotação
+        hasNewItemsForRotation() {
+            return this.selectedIds.some(id => !this.isInRotation(id));
+        },
+
+        async resumeRotation() {
+            if (this._rotationOperationInProgress) return;
+
+            this._rotationOperationInProgress = true;
+            try {
+                const response = await fetch('/api/rotation/resume', { method: 'POST' });
+                if (response.ok) {
+                    await this.checkRotationStatus();
+                    this.showMessage('Rotação retomada', 'success');
+                } else {
+                    const data = await response.json();
+                    this.showMessage(data.detail || 'Erro ao retomar rotação', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao retomar rotação:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this._rotationOperationInProgress = false;
+            }
+        },
+
+        async deleteSavedConfig() {
+            try {
+                const response = await fetch('/api/rotation/config', { method: 'DELETE' });
+                if (response.ok) {
+                    this.hasSavedConfig = false;
+                    // Limpar IDs para remover badges
+                    rotationState.ids = [];
+                }
+            } catch (e) {
+                console.error('Erro ao deletar config:', e);
+            }
+        },
+
+        async toggleRotationItem(itemId, event) {
+            if (event) event.stopPropagation();
+
+            if (!rotationState.active) return;
+
+            const isIn = this.isInRotation(itemId);
+            const endpoint = isIn
+                ? `/api/rotation/remove/${itemId}`
+                : `/api/rotation/add/${itemId}`;
+
+            try {
+                const response = await fetch(endpoint, { method: 'POST' });
+                if (response.ok) {
+                    await this.checkRotationStatus();
+                }
+            } catch (e) {
+                console.error('Erro ao modificar rotação:', e);
+            }
+        },
+
+        async sendSingleImage() {
+            if (this.selectedCount !== 1) return;
+
+            const itemId = this.selectedIds[0];
+            this.sending = true;
+
+            try {
+                const response = await fetch(`/api/gallery/${itemId}/send`, {
+                    method: 'POST',
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.showMessage(`Enviado! ${data.frames_sent} frames`, 'success');
+                    this.singleImageModalOpen = false;
+                    this.selectionMode = false;
+                    this.selectedIds = [];
+                } else {
+                    this.showMessage(data.detail || 'Erro ao enviar', 'error');
+                }
+            } catch (e) {
+                console.error('Erro ao enviar:', e);
+                this.showMessage('Erro de conexão', 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        getSelectedThumbnails() {
+            // Retorna até 6 thumbnails dos itens selecionados
+            return this.selectedIds.slice(0, 6);
+        },
+
         // Keyboard navigation
         handleKeydown(event) {
             // ESC: Close modals or exit selection mode
             if (event.key === 'Escape') {
-                if (this.bulkDeleteConfirm) {
+                if (this.rotationModalOpen) {
+                    this.closeRotationModal();
+                } else if (this.singleImageModalOpen) {
+                    this.closeSingleImageModal();
+                } else if (this.bulkDeleteConfirm) {
                     this.cancelBulkDelete();
                 } else if (this.clearGalleryConfirm) {
                     this.cancelClearGallery();

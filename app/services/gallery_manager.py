@@ -9,7 +9,6 @@ import json
 import os
 import re
 import shutil
-import tempfile
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -20,6 +19,7 @@ from uuid import uuid4
 from PIL import Image
 
 from app.config import GALLERY_DIR
+from app.services.file_utils import atomic_json_write
 
 
 @dataclass
@@ -114,29 +114,14 @@ class GalleryManager:
 
     def _save_metadata(self) -> None:
         """Salva metadados atomicamente com backup."""
+        # Backup antes de escrever
+        if self.metadata_path.exists():
+            shutil.copy2(self.metadata_path, self.backup_path)
+
         data = {
             "items": {item_id: item.to_dict() for item_id, item in self._items.items()},
         }
-        self._atomic_json_write(self.metadata_path, data)
-
-    def _atomic_json_write(self, filepath: Path, data: dict) -> None:
-        """Escreve JSON atomicamente usando temp + replace."""
-        # Backup antes de escrever
-        if filepath.exists():
-            shutil.copy2(filepath, self.backup_path)
-
-        # Criar temp file no mesmo diretório (mesmo filesystem para atomic replace)
-        fd, temp_path = tempfile.mkstemp(
-            dir=filepath.parent, prefix=f".{filepath.name}.", suffix=".tmp"
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(temp_path, filepath)  # Atômico no mesmo filesystem
-        except Exception:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-            raise
+        atomic_json_write(self.metadata_path, data, self.gallery_dir)
 
     def _recover_from_backup(self) -> bool:
         """Tenta recuperar metadados do backup."""

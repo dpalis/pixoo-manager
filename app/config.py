@@ -41,6 +41,10 @@ USER_DATA_DIR = Path.home() / ".pixoo_manager"
 # Galeria persistente de GIFs
 GALLERY_DIR = USER_DATA_DIR / "gallery"
 
+# Rotação automática de imagens
+ROTATION_CONFIG_FILE = USER_DATA_DIR / "rotation_config.json"
+ROTATION_RECONNECT_CHECK_INTERVAL = 30  # segundos entre verificações de reconexão
+
 # ============================================
 # GitHub Update Configuration
 # ============================================
