@@ -32,6 +32,7 @@ from app.routers import gallery as gallery_router
 from app.routers import gif_upload as gif_router
 from app.routers import heartbeat as heartbeat_router
 from app.routers import media_upload as media_router
+from app.routers import rotation as rotation_router
 from app.routers import system as system_router
 from app.routers import text_display as text_router
 from app.routers import youtube as youtube_router
@@ -163,6 +164,7 @@ app.include_router(gallery_router.router)
 app.include_router(gif_router.router)
 app.include_router(heartbeat_router.router)
 app.include_router(media_router.router)
+app.include_router(rotation_router.router)
 app.include_router(system_router.router)
 app.include_router(text_router.router)
 app.include_router(youtube_router.router)
