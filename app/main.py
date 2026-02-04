@@ -85,6 +85,13 @@ async def lifespan(app: FastAPI):
     # Shutdown cleanup
     logger.info("Shutting down...")
     try:
+        # Parar rotação ativa se existir (antes de desconectar do Pixoo)
+        from app.services.rotation_manager import get_rotation_manager
+        rotation = get_rotation_manager()
+        if rotation.get_status().is_active:
+            rotation.stop()
+            logger.info("Rotação parada durante shutdown")
+
         # Desconecta do Pixoo
         from app.services.pixoo_connection import get_pixoo_connection
         conn = get_pixoo_connection()

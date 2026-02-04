@@ -11,9 +11,9 @@ Endpoints:
 - DELETE /api/rotation/config - Deleta configuração salva
 """
 
-from typing import List, Literal
+from typing import Annotated, List, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from app.services.rotation_manager import (
@@ -23,6 +23,17 @@ from app.services.rotation_manager import (
 from app.services.gallery_manager import gallery
 
 router = APIRouter(prefix="/api/rotation", tags=["rotation"])
+
+# ID de item da galeria (8 caracteres hex)
+GalleryItemId = Annotated[
+    str,
+    Path(
+        pattern=r"^[a-f0-9]{8}$",
+        min_length=8,
+        max_length=8,
+        description="ID do item da galeria (8 caracteres hexadecimais)",
+    ),
+]
 
 
 # ============================================
@@ -148,7 +159,7 @@ async def resume_rotation():
 
 
 @router.post("/add/{item_id}", response_model=SuccessResponse)
-async def add_to_rotation(item_id: str):
+async def add_to_rotation(item_id: GalleryItemId):
     """
     Adiciona item à rotação ativa.
 
@@ -173,7 +184,7 @@ async def add_to_rotation(item_id: str):
 
 
 @router.post("/remove/{item_id}", response_model=SuccessResponse)
-async def remove_from_rotation(item_id: str):
+async def remove_from_rotation(item_id: GalleryItemId):
     """
     Remove item da rotação ativa.
 

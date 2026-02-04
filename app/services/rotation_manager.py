@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import random
-import tempfile
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -21,6 +20,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Set
 
 from app.config import ROTATION_CONFIG_FILE, ROTATION_RECONNECT_CHECK_INTERVAL, USER_DATA_DIR
+from app.services.file_utils import atomic_json_write
 
 logger = logging.getLogger(__name__)
 
@@ -291,8 +291,15 @@ class RotationManager:
 
     def get_status(self) -> RotationStatus:
         """Retorna status atual da rotação."""
+        # Primeiro, verificar se rotação está ativa (leitura rápida com lock)
         with self._state_lock:
-            saved_config = self._load_config() if not self._is_active else None
+            is_active = self._is_active
+
+        # Carregar config FORA do lock para evitar I/O durante contenção
+        saved_config = self._load_config() if not is_active else None
+
+        # Agora montar o status com lock (leitura rápida de estado em memória)
+        with self._state_lock:
             has_saved = saved_config is not None
 
             # Se rotação ativa, mostrar IDs atuais
@@ -391,9 +398,10 @@ class RotationManager:
                     self.remove_item(current_id)
                     continue
 
-                # Enviar para Pixoo
+                # Enviar para Pixoo (run_in_executor para não bloquear o event loop)
                 try:
-                    result = upload_gif(gif_path)
+                    loop = asyncio.get_running_loop()
+                    result = await loop.run_in_executor(None, upload_gif, gif_path)
                     consecutive_failures = 0
                     # Obter nome do item para log mais legível
                     item = gallery.get_item(current_id)
@@ -470,7 +478,7 @@ class RotationManager:
             )
 
         data = {"version": 1, **config.to_dict()}
-        self._atomic_json_write(ROTATION_CONFIG_FILE, data)
+        atomic_json_write(ROTATION_CONFIG_FILE, data, USER_DATA_DIR)
         logger.debug("Configuração de rotação salva")
 
     def _load_config(self) -> Optional[RotationConfig]:
@@ -487,6 +495,31 @@ class RotationManager:
                 logger.warning("Versão de config incompatível")
                 return None
 
+            # Validar tipos explicitamente
+            if not isinstance(data.get("selected_ids"), list):
+                logger.warning("Config corrompida: selected_ids deve ser uma lista")
+                self._delete_config()
+                return None
+
+            if not isinstance(data.get("interval_seconds"), int):
+                logger.warning("Config corrompida: interval_seconds deve ser inteiro")
+                self._delete_config()
+                return None
+
+            # Validar intervalo é um dos permitidos
+            if data["interval_seconds"] not in ROTATION_INTERVALS:
+                logger.warning(
+                    f"Config corrompida: intervalo {data['interval_seconds']} não é permitido"
+                )
+                self._delete_config()
+                return None
+
+            # Validar que selected_ids contém apenas strings
+            if not all(isinstance(id, str) for id in data["selected_ids"]):
+                logger.warning("Config corrompida: selected_ids deve conter apenas strings")
+                self._delete_config()
+                return None
+
             config = RotationConfig.from_dict(data)
 
             # Validar IDs ainda existem
@@ -498,7 +531,14 @@ class RotationManager:
 
             # Atualizar config se alguns IDs foram removidos
             if len(valid_ids) != len(config.selected_ids):
+                original_count = len(config.selected_ids)
                 config.selected_ids = valid_ids
+                config.updated_at = datetime.now(timezone.utc).isoformat()
+                corrected_data = {"version": 1, **config.to_dict()}
+                atomic_json_write(ROTATION_CONFIG_FILE, corrected_data, USER_DATA_DIR)
+                logger.info(
+                    f"Config atualizada: {len(valid_ids)} IDs válidos de {original_count} originais"
+                )
 
             return config
 
@@ -516,25 +556,6 @@ class RotationManager:
         except Exception as e:
             logger.error(f"Erro ao deletar config: {e}")
             return False
-
-    def _atomic_json_write(self, filepath: Path, data: dict) -> None:
-        """Escreve JSON atomicamente usando temp + replace."""
-        # Garantir diretório existe
-        USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Criar temp file no mesmo diretório
-        fd, temp_path = tempfile.mkstemp(
-            dir=filepath.parent, prefix=f".{filepath.name}.", suffix=".tmp"
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(temp_path, filepath)
-        except Exception:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-            raise
-
 
 # Instância global (singleton)
 def get_rotation_manager() -> RotationManager:

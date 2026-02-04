@@ -489,26 +489,6 @@
                     </div>
                 </div>
 
-                <!-- Stop Rotation Confirmation Modal -->
-                <div class="rotation-modal" x-show="stopRotationConfirm" x-cloak x-transition>
-                    <div class="rotation-modal-backdrop" @click="cancelStopRotation()"></div>
-                    <div class="confirm-rotation-modal-content" @click.stop>
-                        <div class="rotation-modal-header">
-                            <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                            </svg>
-                            <h3>Parar rotação?</h3>
-                        </div>
-                        <p>Há uma rotação automática ativa na galeria. Enviar esta imagem irá <strong>parar a rotação</strong> e exibir apenas esta imagem.</p>
-                        <div class="rotation-modal-actions">
-                            <button class="secondary" @click="cancelStopRotation()">Cancelar</button>
-                            <button class="btn-stop" @click="confirmStopRotationAndSend()">Parar e Enviar</button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
             </div>
 
@@ -707,26 +687,6 @@
                     </div>
                 </div>
 
-                <!-- Stop Rotation Confirmation Modal -->
-                <div class="rotation-modal" x-show="stopRotationConfirm" x-cloak x-transition>
-                    <div class="rotation-modal-backdrop" @click="cancelStopRotation()"></div>
-                    <div class="confirm-rotation-modal-content" @click.stop>
-                        <div class="rotation-modal-header">
-                            <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                            </svg>
-                            <h3>Parar rotação?</h3>
-                        </div>
-                        <p>Há uma rotação automática ativa na galeria. Enviar esta imagem irá <strong>parar a rotação</strong> e exibir apenas esta imagem.</p>
-                        <div class="rotation-modal-actions">
-                            <button class="secondary" @click="cancelStopRotation()">Cancelar</button>
-                            <button class="btn-stop" @click="confirmStopRotationAndSend()">Parar e Enviar</button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="message" x-show="message" x-cloak :class="messageType" x-text="message"></div>
             </div>
 
@@ -858,19 +818,19 @@
                 <h2>Galeria de GIFs</h2>
 
                 <!-- Rotation Active Banner -->
-                <div class="rotation-active-banner" x-show="rotationActive" x-cloak>
+                <div class="rotation-active-banner" x-show="rotationState.active" x-cloak>
                     <div class="rotation-active-info">
                         <svg class="rotation-active-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
                             <path d="M21 3v5h-5"/>
                         </svg>
                         <span class="rotation-active-text">
-                            <strong x-text="rotationPaused ? 'Rotação pausada' : 'Rotação ativa'"></strong>
-                            &middot; <span x-text="rotationIds.length"></span> imagens
-                            &middot; a cada <span x-text="rotationIntervalLabel"></span>
+                            <strong x-text="rotationState.paused ? 'Rotação pausada' : 'Rotação ativa'"></strong>
+                            &middot; <span x-text="rotationState.ids.length"></span> imagens
+                            &middot; a cada <span x-text="rotationState.intervalLabel"></span>
                         </span>
                     </div>
-                    <button class="btn-stop" @click="stopRotation()">
+                    <button class="btn-stop" @click="stopRotation()" :disabled="_rotationOperationInProgress">
                         <svg viewBox="0 0 24 24" fill="currentColor">
                             <rect x="6" y="6" width="12" height="12" rx="1"/>
                         </svg>
@@ -879,7 +839,7 @@
                 </div>
 
                 <!-- Rotation Resume Banner -->
-                <div class="rotation-resume-banner" x-show="!rotationActive && hasSavedConfig" x-cloak>
+                <div class="rotation-resume-banner" x-show="!rotationState.active && hasSavedConfig" x-cloak>
                     <div class="rotation-resume-info">
                         <svg class="rotation-resume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -891,7 +851,7 @@
                         </span>
                     </div>
                     <div style="display: flex; align-items: center;">
-                        <button class="btn-resume" @click="resumeRotation()">
+                        <button class="btn-resume" @click="resumeRotation()" :disabled="_rotationOperationInProgress">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
                                 <path d="M21 3v5h-5"/>
@@ -960,21 +920,21 @@
                         <!-- Botão Rotação: muda comportamento se rotação já ativa -->
                         <button
                             class="selection-btn rotation"
-                            @click="rotationActive ? addToRotation() : openRotationModal()"
-                            :disabled="selectedCount === 0 || (rotationActive && !hasNewItemsForRotation())"
-                            x-show="!rotationActive || hasNewItemsForRotation()"
+                            @click="rotationState.active ? addToRotation() : openRotationModal()"
+                            :disabled="selectedCount === 0 || (rotationState.active && !hasNewItemsForRotation()) || _rotationOperationInProgress"
+                            x-show="!rotationState.active || hasNewItemsForRotation()"
                         >
                             <!-- Ícone rotação (quando não ativa) -->
-                            <svg x-show="!rotationActive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg x-show="!rotationState.active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
                                 <path d="M21 3v5h-5"/>
                             </svg>
                             <!-- Ícone + (quando rotação ativa, para adicionar) -->
-                            <svg x-show="rotationActive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <svg x-show="rotationState.active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            <span x-text="rotationActive ? 'Adicionar' : 'Rotação'"></span>
+                            <span x-text="rotationState.active ? 'Adicionar' : 'Rotação'"></span>
                         </button>
                         <button
                             class="selection-btn danger"
@@ -1230,7 +1190,7 @@
                         </div>
                         <div class="rotation-modal-actions">
                             <button class="secondary" @click="closeRotationModal()">Cancelar</button>
-                            <button class="primary btn-start" @click="startRotation()">
+                            <button class="primary btn-start" @click="startRotation()" :disabled="_rotationOperationInProgress">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <polygon points="5 3 19 12 5 21 5 3"/>
                                 </svg>
@@ -1284,26 +1244,6 @@
                     </div>
                 </div>
 
-                <!-- Stop Rotation Confirmation Modal (Gallery) -->
-                <div class="rotation-modal" x-show="stopRotationConfirm" x-cloak x-transition>
-                    <div class="rotation-modal-backdrop" @click="cancelStopRotation()"></div>
-                    <div class="confirm-rotation-modal-content" @click.stop>
-                        <div class="rotation-modal-header">
-                            <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                            </svg>
-                            <h3>Parar rotação?</h3>
-                        </div>
-                        <p>Há uma rotação automática ativa. Enviar esta imagem irá <strong>parar a rotação</strong> e exibir apenas esta imagem.</p>
-                        <div class="rotation-modal-actions">
-                            <button class="secondary" @click="cancelStopRotation()">Cancelar</button>
-                            <button class="btn-stop" @click="confirmStopRotationAndSend()">Parar e Enviar</button>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Gallery Footer with Clear All button -->
                 <div class="gallery-footer" x-show="stats && stats.item_count > 0 && !selectionMode">
                     <span class="gallery-footer-stats" x-text="(stats?.item_count || 0) + ' GIFs na galeria'"></span>
@@ -1319,6 +1259,31 @@
             {% endif %}
         </section>
     </main>
+
+    <!-- Modal global de confirmação de parada de rotação -->
+    <div x-data="stopRotationModal()"
+         @show-stop-rotation-confirm.window="open($event.detail)"
+         class="rotation-modal"
+         x-show="show"
+         x-cloak
+         x-transition>
+        <div class="rotation-modal-backdrop" @click="cancel()"></div>
+        <div class="confirm-rotation-modal-content" @click.stop>
+            <div class="rotation-modal-header">
+                <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <h3>Parar rotação?</h3>
+            </div>
+            <p>Há uma rotação automática ativa na galeria. Enviar esta imagem irá <strong>parar a rotação</strong> e exibir apenas esta imagem.</p>
+            <div class="rotation-modal-actions">
+                <button class="secondary" @click="cancel()">Cancelar</button>
+                <button class="btn-stop" @click="confirm()">Parar e Enviar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal de Atualização -->
     <div class="modal-overlay" x-data="updateModal()" x-show="show" x-cloak @keydown.escape.window="close()">
