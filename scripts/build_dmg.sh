@@ -93,7 +93,11 @@ echo -e "\n${YELLOW}Step 5: Creating styled DMG...${NC}"
 # Remove existing DMG if present
 rm -f "$DMG_FINAL"
 
-# Build DMG arguments
+# Create a temporary symlink to Applications
+TEMP_APPS_LINK=$(mktemp -d)/Applications
+ln -s /Applications "$TEMP_APPS_LINK"
+
+# Build DMG arguments (using symlink instead of app-drop-link to avoid border)
 DMG_ARGS=(
     --volname "$VOLUME_NAME"
     --background "$BACKGROUND_IMG"
@@ -102,7 +106,7 @@ DMG_ARGS=(
     --icon-size $ICON_SIZE
     --icon "${APP_NAME}.app" $APP_ICON_X $APP_ICON_Y
     --hide-extension "${APP_NAME}.app"
-    --app-drop-link $APPS_ICON_X $APPS_ICON_Y
+    --add-file "Applications" "$TEMP_APPS_LINK" $APPS_ICON_X $APPS_ICON_Y
 )
 
 # Add volume icon if exists
@@ -129,6 +133,20 @@ if [ $CREATE_DMG_EXIT -ne 0 ] && [ $CREATE_DMG_EXIT -ne 2 ]; then
     echo -e "${YELLOW}Warning: create-dmg returned exit code $CREATE_DMG_EXIT${NC}"
 fi
 
+echo "Done."
+
+# Step 6: Set DMG file icon (for Finder)
+echo -e "\n${YELLOW}Step 6: Setting DMG file icon...${NC}"
+if command -v fileicon &> /dev/null; then
+    if [ -f "$VOLUME_ICON" ]; then
+        fileicon set "$DMG_FINAL" "$VOLUME_ICON"
+        echo "DMG icon set from $VOLUME_ICON"
+    else
+        echo "Warning: Volume icon not found, skipping DMG icon"
+    fi
+else
+    echo "Warning: fileicon not installed. Install with: brew install fileicon"
+fi
 echo "Done."
 
 # Summary
