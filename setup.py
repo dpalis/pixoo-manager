@@ -27,13 +27,16 @@ DATA_FILES = [
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": "resources/Pixoo.icns",
+    "frameworks": [
+        "/opt/homebrew/opt/expat/lib/libexpat.1.dylib",
+    ],
     "plist": {
         "CFBundleName": "Pixoo",
         "CFBundleDisplayName": "Pixoo",
         "CFBundleIdentifier": "com.pixoo.manager",
         "CFBundleVersion": __version__,
         "CFBundleShortVersionString": __version__,
-        "LSMinimumSystemVersion": "10.15",
+        "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
     },
