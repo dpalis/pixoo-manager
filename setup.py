@@ -4,11 +4,14 @@ py2app setup for Pixoo Manager.
 Build with: python setup.py py2app
 """
 
+import os
+
 from setuptools import setup
 
 from app.__version__ import __version__
 
-APP = ["app/main.py"]
+APP = ["launcher.py"]
+
 DATA_FILES = [
     ("", ["resources/Pixoo.icns"]),  # Icon at root of Resources
     ("templates", ["app/templates/base.html"]),
@@ -21,8 +24,11 @@ DATA_FILES = [
         "app/static/vendor/cropper.min.js",
         "app/static/vendor/cropper.min.css",
     ]),
-    ("bin", ["bin/ffmpeg"]),
 ]
+
+# Incluir ffmpeg apenas se existir (download separado)
+if os.path.exists("bin/ffmpeg"):
+    DATA_FILES.append(("bin", ["bin/ffmpeg"]))
 
 OPTIONS = {
     "argv_emulation": False,
@@ -36,8 +42,10 @@ OPTIONS = {
         "LSMinimumSystemVersion": "10.15",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
+        "LSUIElement": True,  # Menu bar app — sem ícone no Dock
     },
     "packages": [
+        # --- Já existentes ---
         "uvicorn",
         "fastapi",
         "starlette",
@@ -56,6 +64,30 @@ OPTIONS = {
         "aiofiles",
         "httptools",
         "app",
+        # --- Novos (dependências faltantes) ---
+        "requests",           # pixoo_connection.py — HTTP com Pixoo
+        "httpx",              # youtube.py router — HTTP async
+        "packaging",          # updater.py — comparação de versões
+        "multipart",          # FastAPI UploadFile dependency
+        "pydantic_core",      # pydantic v2 C extension
+        "certifi",            # requests SSL certificates
+        "h11",                # uvicorn HTTP transport
+        "imageio_ffmpeg",     # moviepy ffmpeg discovery
+        "annotated_types",    # pydantic v2 dependency
+        "typing_extensions",  # pydantic/fastapi dependency
+        "sniffio",            # anyio dependency
+        "idna",               # requests dependency
+        "urllib3",            # requests dependency
+    ],
+    "includes": [
+        # Hidden imports do uvicorn (carregados via importlib)
+        "uvicorn.lifespan.on",
+        "uvicorn.lifespan.off",
+        "uvicorn.protocols.http.h11_impl",
+        "uvicorn.protocols.http.httptools_impl",
+        "uvicorn.protocols.websockets.auto",
+        "uvicorn.loops.auto",
+        "uvicorn.logging",
     ],
     "excludes": [
         "tkinter",

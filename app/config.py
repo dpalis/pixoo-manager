@@ -121,3 +121,30 @@ def _get_templates_dir() -> Path:
 # Diretórios dinâmicos (avaliados na importação)
 STATIC_DIR = _get_static_dir()
 TEMPLATES_DIR = _get_templates_dir()
+
+
+def configure_ffmpeg_env() -> None:
+    """
+    Configura env vars do FFmpeg para desenvolvimento (sem launcher).
+
+    Define IMAGEIO_FFMPEG_EXE, FFMPEG_BINARY e PATH quando o binário
+    bundled existe. No app empacotado, launcher.py já fez isso antes
+    de qualquer import — esta função é idempotente nesses casos.
+    """
+    import os
+
+    if not FFMPEG_PATH.exists():
+        return
+
+    ffmpeg_str = str(FFMPEG_PATH)
+    os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_str
+    os.environ["FFMPEG_BINARY"] = ffmpeg_str
+
+    ffmpeg_dir = str(FFMPEG_PATH.parent)
+    current_path = os.environ.get("PATH", "")
+    if ffmpeg_dir not in current_path:
+        os.environ["PATH"] = f"{ffmpeg_dir}:{current_path}"
+
+
+# Configurar FFmpeg na importação do módulo
+configure_ffmpeg_env()

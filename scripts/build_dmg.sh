@@ -87,6 +87,13 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 echo "Found: $APP_PATH"
 
+# Garantir permissão de execução do ffmpeg bundled
+FFMPEG_BUNDLED="$APP_PATH/Contents/Resources/bin/ffmpeg"
+if [ -f "$FFMPEG_BUNDLED" ]; then
+    chmod +x "$FFMPEG_BUNDLED"
+    echo "ffmpeg permissions set: +x"
+fi
+
 # Step 5: Create DMG with create-dmg
 echo -e "\n${YELLOW}Step 5: Creating styled DMG...${NC}"
 
