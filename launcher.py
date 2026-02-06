@@ -16,11 +16,17 @@ from datetime import datetime
 from pathlib import Path
 
 
-def show_error_dialog(title: str, message: str):
+def show_error_dialog(title: str, message: str) -> None:
     """Mostra diálogo nativo macOS via osascript (zero dependências Python)."""
     short_msg = message[:500] + "..." if len(message) > 500 else message
-    # Escapar para AppleScript
-    short_msg = short_msg.replace("\\", "\\\\").replace('"', '\\"')
+    # Escapar para AppleScript: backslash, aspas, e newlines (quebraria a string literal)
+    short_msg = (
+        short_msg
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "")
+        .replace("\n", '" & return & "')
+    )
     script = (
         f'display dialog "{short_msg}" '
         f'with title "{title}" '
@@ -58,7 +64,8 @@ def write_crash_log(error: Exception) -> Path:
             f"\n--- Traceback ---\n"
             f"{traceback.format_exc()}\n"
             f"\n--- sys.path ---\n"
-            f"{chr(10).join(sys.path)}\n"
+            + "\n".join(sys.path)
+            + "\n"
         )
         log_file.write_text(content, encoding="utf-8")
     except Exception:
@@ -67,7 +74,7 @@ def write_crash_log(error: Exception) -> Path:
     return log_file
 
 
-def setup_frozen_env():
+def setup_frozen_env() -> None:
     """Configura env vars para app empacotado (antes de qualquer import do app)."""
     frozen = getattr(sys, "frozen", False)
     if frozen != "macosx_app":
@@ -87,7 +94,7 @@ def setup_frozen_env():
             os.environ["PATH"] = f"{ffmpeg_dir}:{current_path}"
 
 
-def main():
+def main() -> None:
     """Entry point principal — toda exceção é capturada."""
     try:
         # Configurar ambiente ANTES de qualquer import do app

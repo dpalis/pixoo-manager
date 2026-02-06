@@ -17,36 +17,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = PROJECT_ROOT / "app"
 SETUP_PY = PROJECT_ROOT / "setup.py"
 
-# Módulos da stdlib do Python 3.10+ (subset relevante)
-# Não precisa ser exaustivo — só precisa cobrir o que aparece no código
-STDLIB_MODULES = {
-    "abc", "asyncio", "base64", "builtins", "collections", "concurrent",
-    "contextlib", "copy", "csv", "ctypes", "dataclasses", "datetime",
-    "decimal", "difflib", "email", "enum", "errno", "fnmatch", "functools",
-    "gc", "getpass", "glob", "grp", "gzip", "hashlib", "hmac", "html",
-    "http", "importlib", "inspect", "io", "ipaddress", "itertools", "json",
-    "logging", "lzma", "math", "mimetypes", "multiprocessing", "operator",
-    "os", "pathlib", "pickle", "pkgutil", "platform", "plistlib",
-    "posixpath", "pprint", "queue", "random", "re", "secrets", "select",
-    "selectors", "shlex", "shutil", "signal", "socket", "sqlite3", "ssl",
-    "string", "struct", "subprocess", "sys", "sysconfig", "tempfile",
-    "textwrap", "threading", "time", "timeit", "token", "tokenize",
-    "traceback", "types", "typing", "unicodedata", "unittest", "urllib",
-    "uuid", "warnings", "weakref", "webbrowser", "xml", "zipfile",
-    "zipimport",
-}
+# Módulos da stdlib (Python 3.10+ fornece sys.stdlib_module_names)
+STDLIB_MODULES = sys.stdlib_module_names
 
 # Mapeamento: nome do import → nome do pacote no setup.py
-# Necessário porque pip name != import name em vários casos
-IMPORT_TO_PACKAGE = {
-    "PIL": "PIL",
-    "pydantic_core": "pydantic_core",
-    "imageio_ffmpeg": "imageio_ffmpeg",
-    "sse_starlette": "sse_starlette",
-    "charset_normalizer": "charset_normalizer",
-    "annotated_types": "annotated_types",
-    "typing_extensions": "typing_extensions",
-}
+# Adicionar aqui quando pip name != import name (ex: "Pillow" → "PIL")
+# Nota: só incluir mapeamentos onde chave != valor
+IMPORT_TO_PACKAGE: dict[str, str] = {}
 
 
 def extract_imports_from_file(filepath: Path) -> set[str]:
