@@ -78,10 +78,12 @@ def main():
 
     # 1. Coletar todos os imports de terceiros em app/
     all_imports = set()
+    import_to_files: dict[str, set[str]] = {}
     py_files = sorted(APP_DIR.rglob("*.py"))
 
     for filepath in py_files:
         file_imports = extract_imports_from_file(filepath)
+        rel_path = str(filepath.relative_to(PROJECT_ROOT))
         for imp in file_imports:
             # Filtrar: stdlib, imports internos (app.*), e __future__
             if imp in STDLIB_MODULES:
@@ -89,6 +91,7 @@ def main():
             if imp == "app" or imp == "__future__":
                 continue
             all_imports.add(imp)
+            import_to_files.setdefault(imp, set()).add(rel_path)
 
     # 2. Ler packages do setup.py
     setup_packages = extract_setup_packages(SETUP_PY)
@@ -110,19 +113,19 @@ def main():
     if missing:
         print("FALTANDO no setup.py (causam crash no bundle):")
         for pkg in sorted(missing):
-            # Encontrar qual arquivo importa esse pacote
-            sources = []
-            for filepath in py_files:
-                file_imports = extract_imports_from_file(filepath)
-                original_name = pkg
-                # Reverter mapeamento para encontrar o import original
-                for orig, mapped in IMPORT_TO_PACKAGE.items():
-                    if mapped == pkg:
-                        original_name = orig
-                        break
-                if original_name in file_imports or pkg in file_imports:
-                    sources.append(str(filepath.relative_to(PROJECT_ROOT)))
-            print(f"  - {pkg} (usado em: {', '.join(sources[:3])})")
+            # Encontrar qual arquivo importa esse pacote usando o mapa já coletado
+            original_name = pkg
+            # Reverter mapeamento para encontrar o import original
+            for orig, mapped in IMPORT_TO_PACKAGE.items():
+                if mapped == pkg:
+                    original_name = orig
+                    break
+            sources = set()
+            if original_name in import_to_files:
+                sources.update(import_to_files[original_name])
+            if pkg in import_to_files:
+                sources.update(import_to_files[pkg])
+            print(f"  - {pkg} (usado em: {', '.join(sorted(sources)[:3])})")
         print()
 
     if extra:

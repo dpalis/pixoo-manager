@@ -7,19 +7,11 @@ Implementa abordagem hibrida com 3 metodos em cascata para download parcial.
 
 import gc
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from app.config import MAX_VIDEO_DURATION, MAX_SHORTS_DURATION, TEMP_DIR, FFMPEG_PATH
-
-# Adicionar FFmpeg ao PATH para que yt-dlp consiga encontrar
-if FFMPEG_PATH.exists():
-    ffmpeg_dir = str(FFMPEG_PATH.parent)
-    current_path = os.environ.get("PATH", "")
-    if ffmpeg_dir not in current_path:
-        os.environ["PATH"] = f"{ffmpeg_dir}:{current_path}"
 
 logger = logging.getLogger(__name__)
 from app.services.exceptions import ConversionError, VideoTooLongError, ValidationError

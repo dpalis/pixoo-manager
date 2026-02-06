@@ -65,9 +65,24 @@ fi
 echo -n "3. Starting app (headless)... "
 PIXOO_HEADLESS=true "$APP_PATH" &
 PID=$!
-sleep "$TIMEOUT"
 
-# Verifica que o processo ainda está rodando
+# Poll até o servidor responder ou atingir timeout
+ELAPSED=0
+SERVER_READY=false
+while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    # Verifica que o processo ainda está vivo
+    if ! kill -0 "$PID" 2>/dev/null; then
+        break
+    fi
+    # Verifica se o servidor responde
+    if curl -s -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null; then
+        SERVER_READY=true
+        break
+    fi
+    sleep 0.5
+    ELAPSED=$((ELAPSED + 1))
+done
+
 if ! kill -0 "$PID" 2>/dev/null; then
     echo -e "${RED}FAIL${NC}"
     echo "   App crashed during startup."
@@ -79,9 +94,15 @@ if ! kill -0 "$PID" 2>/dev/null; then
     fi
     exit 1
 fi
-echo -e "${GREEN}OK (PID: $PID)${NC}"
 
-# 4. Verifica que o servidor responde HTTP
+if [ "$SERVER_READY" = false ]; then
+    echo -e "${RED}FAIL${NC}"
+    echo "   Server did not respond within ${TIMEOUT}s."
+    exit 1
+fi
+echo -e "${GREEN}OK (PID: $PID, ~${ELAPSED}s)${NC}"
+
+# 4. Verifica que o servidor responde HTTP com código válido
 echo -n "4. HTTP response... "
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/" 2>/dev/null)
 
@@ -90,12 +111,6 @@ if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
 else
     echo -e "${RED}FAIL${NC}"
     echo "   Expected HTTP 200 or 302, got $HTTP_CODE"
-    CRASH_LOG="$HOME/.pixoo_manager/crash.log"
-    if [ -f "$CRASH_LOG" ]; then
-        echo ""
-        echo "--- Crash Log ---"
-        cat "$CRASH_LOG"
-    fi
     exit 1
 fi
 
