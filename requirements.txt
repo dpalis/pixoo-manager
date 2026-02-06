@@ -13,7 +13,7 @@ numpy>=1.24.0
 scipy>=1.11.0
 
 # Video
-moviepy>=1.0.3
+moviepy>=2.0.0
 
 # YouTube
 yt-dlp>=2024.1.0

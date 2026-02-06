@@ -270,8 +270,14 @@ def _wait_for_server(timeout: float = 5.0) -> bool:
     return False
 
 
-if __name__ == "__main__":
-    # Setup logging antes de qualquer output
+def run_app():
+    """
+    Executa o Pixoo Manager.
+
+    Chamado pelo launcher.py (py2app) ou pelo bloco __main__ (desenvolvimento).
+    """
+    global _SKIP_BROWSER_IN_LIFESPAN
+
     setup_logging()
     logger = logging.getLogger(__name__)
 
@@ -282,7 +288,7 @@ if __name__ == "__main__":
         try:
             from app.menubar import run_menu_bar
 
-            # Indica que browser será aberto pelo __main__, não pelo lifespan
+            # Indica que browser será aberto aqui, não pelo lifespan
             _SKIP_BROWSER_IN_LIFESPAN = True
 
             # Servidor em daemon thread (para quando menubar fechar)
@@ -310,3 +316,7 @@ if __name__ == "__main__":
         # Não-macOS ou headless
         logger.info("Pressione Ctrl+C para parar")
         uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+
+
+if __name__ == "__main__":
+    run_app()
