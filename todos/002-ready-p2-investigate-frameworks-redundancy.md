@@ -1,6 +1,6 @@
 ---
 id: "002"
-status: ready
+status: wont_fix
 priority: p2
 title: "Investigar se frameworks com libexpat é redundante"
 files:
