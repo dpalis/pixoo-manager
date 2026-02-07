@@ -33,13 +33,19 @@ if os.path.exists("bin/ffmpeg"):
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": "resources/Pixoo.icns",
+    "frameworks": [
+        # libexpat não existe em disco desde macOS 11+ (vive no dyld shared cache).
+        # py2app não copia dylibs de /usr/lib/, então bundlamos a do Homebrew.
+        # Pré-requisito: brew install expat
+        os.environ.get("EXPAT_LIB", "/opt/homebrew/opt/expat/lib/libexpat.1.dylib"),
+    ],
     "plist": {
         "CFBundleName": "Pixoo",
         "CFBundleDisplayName": "Pixoo",
         "CFBundleIdentifier": "com.pixoo.manager",
         "CFBundleVersion": __version__,
         "CFBundleShortVersionString": __version__,
-        "LSMinimumSystemVersion": "10.15",
+        "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSUIElement": True,  # Menu bar app — sem ícone no Dock

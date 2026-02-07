@@ -12,6 +12,7 @@
 #   - py2app installed in .venv
 #   - Python 3.10+
 #   - create-dmg (brew install create-dmg)
+#   - expat (brew install expat)
 #
 # Usage:
 #   ./scripts/build_dmg.sh
@@ -59,6 +60,29 @@ if ! command -v create-dmg &> /dev/null; then
 fi
 echo "create-dmg found."
 
+EXPAT_LIB="$(brew --prefix expat 2>/dev/null)/lib/libexpat.1.dylib"
+if [ ! -f "$EXPAT_LIB" ]; then
+    echo -e "${RED}Error: libexpat not found${NC}"
+    echo "Install with: brew install expat"
+    exit 1
+fi
+echo "libexpat found: $EXPAT_LIB"
+export EXPAT_LIB
+
+# Verify FFmpeg code signing
+if [ -f "bin/ffmpeg" ]; then
+    if ! codesign -v bin/ffmpeg 2>/dev/null; then
+        echo -e "${YELLOW}Warning: FFmpeg binary is not properly signed${NC}"
+        echo "Download a signed build from: https://ffmpeg.martin-riedl.de/"
+    else
+        echo "FFmpeg code signature valid."
+    fi
+else
+    echo -e "${RED}Error: bin/ffmpeg not found.${NC}"
+    echo "Download from: https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+    exit 1
+fi
+
 # Step 1: Clean previous builds
 echo -e "\n${YELLOW}Step 1: Cleaning previous builds...${NC}"
 rm -rf "$BUILD_DIR" "$DIST_DIR"
@@ -75,6 +99,8 @@ echo "Done."
 
 # Step 3: Build .app with py2app
 echo -e "\n${YELLOW}Step 3: Building .app with py2app...${NC}"
+export MACOSX_DEPLOYMENT_TARGET="12.0"
+echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
 source .venv/bin/activate && python3 setup.py py2app 2>&1 | grep -E "(copying|Done|error)" | tail -5
 echo "Done."
 

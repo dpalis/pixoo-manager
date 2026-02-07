@@ -88,13 +88,19 @@ Para criar o `Pixoo.app`:
 
 ```bash
 mkdir -p bin
-curl -L 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip' -o /tmp/ffmpeg.zip
+curl -L 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip' -o /tmp/ffmpeg.zip
 unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg_extracted
 mv /tmp/ffmpeg_extracted/ffmpeg bin/ffmpeg
 chmod +x bin/ffmpeg
 ```
 
-### 2. Executar build
+### 2. Instalar dependencias de build
+
+```bash
+brew install create-dmg expat
+```
+
+### 3. Executar build
 
 ```bash
 source .venv/bin/activate
