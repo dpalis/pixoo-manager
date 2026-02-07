@@ -94,8 +94,8 @@ Alinha plist com README e com a realidade (Apple Silicon = macOS 11+, mas macOS 
 - [x] `libexpat.1.dylib` presente em `Contents/Frameworks/` do `.app` apos build
 - [x] `LSMinimumSystemVersion` = `"12.0"` no Info.plist gerado
 - [x] `bin/ffmpeg` e arm64: `file bin/ffmpeg` mostra `arm64`
-- [ ] Build completo (`scripts/build_dmg.sh`) executa sem erros — .app OK, DMG falha por permissao AppleScript ao Finder (pre-existente)
-- [ ] App abre e funciona normalmente apos as mudancas
+- [x] Build completo (`scripts/build_dmg.sh`) executa sem erros
+- [x] App abre e funciona normalmente apos as mudancas
 
 ## Riscos
 
