@@ -60,13 +60,28 @@ if ! command -v create-dmg &> /dev/null; then
 fi
 echo "create-dmg found."
 
-EXPAT_LIB="/opt/homebrew/opt/expat/lib/libexpat.1.dylib"
+EXPAT_LIB="$(brew --prefix expat 2>/dev/null)/lib/libexpat.1.dylib"
 if [ ! -f "$EXPAT_LIB" ]; then
-    echo -e "${RED}Error: libexpat not found at $EXPAT_LIB${NC}"
+    echo -e "${RED}Error: libexpat not found${NC}"
     echo "Install with: brew install expat"
     exit 1
 fi
-echo "libexpat found."
+echo "libexpat found: $EXPAT_LIB"
+export EXPAT_LIB
+
+# Verify FFmpeg code signing
+if [ -f "bin/ffmpeg" ]; then
+    if ! codesign -v bin/ffmpeg 2>/dev/null; then
+        echo -e "${YELLOW}Warning: FFmpeg binary is not properly signed${NC}"
+        echo "Download a signed build from: https://ffmpeg.martin-riedl.de/"
+    else
+        echo "FFmpeg code signature valid."
+    fi
+else
+    echo -e "${RED}Error: bin/ffmpeg not found.${NC}"
+    echo "Download from: https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+    exit 1
+fi
 
 # Step 1: Clean previous builds
 echo -e "\n${YELLOW}Step 1: Cleaning previous builds...${NC}"

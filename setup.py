@@ -4,6 +4,8 @@ py2app setup for Pixoo Manager.
 Build with: python setup.py py2app
 """
 
+import os
+
 from setuptools import setup
 
 from app.__version__ import __version__
@@ -28,7 +30,10 @@ OPTIONS = {
     "argv_emulation": False,
     "iconfile": "resources/Pixoo.icns",
     "frameworks": [
-        "/opt/homebrew/opt/expat/lib/libexpat.1.dylib",
+        # libexpat não existe em disco desde macOS 11+ (vive no dyld shared cache).
+        # py2app não copia dylibs de /usr/lib/, então bundlamos a do Homebrew.
+        # Pré-requisito: brew install expat
+        os.environ.get("EXPAT_LIB", "/opt/homebrew/opt/expat/lib/libexpat.1.dylib"),
     ],
     "plist": {
         "CFBundleName": "Pixoo",
